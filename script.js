@@ -1,4 +1,4 @@
-// Tabela Exata do Algoritmo SRS (Nível: Dias adicionados a partir da data em que foi marcado)
+// Tabela Exata do Algoritmo SRS (Nível: Dias adicionados a partir da data de marcação)
 const SRS_INTERVALS = {
   1: 1,
   2: 2,
@@ -20,7 +20,7 @@ const SRS_INTERVALS = {
 };
 const MAX_SRS_LEVEL = 17;
 
-// Base inicial de frases (utilizada caso não exista nada salvo no localStorage)
+// Acervo Inicial
 const defaultPhrases = [
   {"id": 1, "hanzi": "我早上四点起床去上班。", "pinyin": "Wǒ zǎoshang sì diǎn qǐchuáng qù shàngbān.", "traducao": "Eu acordo às quatro da manhã e vou trabalhar."},
   {"id": 2, "hanzi": "我的朋友周末喜欢去电影院。", "pinyin": "Wǒ de péngyou zhōumò xǐhuan qù diànyǐngyuàn.", "traducao": "Meu amigo gosta de ir ao cinema no fim de semana."},
@@ -67,27 +67,29 @@ const defaultPhrases = [
   {"id": 43, "hanzi": "我在健身房练力量举。", "pinyin": "Wǒ zài jiànshēnfáng liàn lìliàngjǔ.", "traducao": "Eu pratico powerlifting na academia."}
 ];
 
-// Estado global da aplicação
+// Estado global
 let phrasesData = [];
-let currentMainTab = 'all'; // 'all', 'today', 'studied'
+let currentMainTab = 'all'; // 'all', 'today', 'future', 'studied', 'manage'
 let filteredPhrases = [];
 let currentView = 'cards';
 let currentFlashcardIndex = 0;
 let currentModalPhrase = null;
 
-// P2P PeerJS
+// PeerJS P2P
 let peer = null;
 let peerConn = null;
 
-// Elementos DOM
+// DOM
 const searchInput = document.getElementById('search-input');
 const btnClearSearch = document.getElementById('btn-clear-search');
 const sortBySelect = document.getElementById('sort-by');
+const mainToolbar = document.getElementById('main-toolbar');
 
 const cardsView = document.getElementById('cards-view');
 const tableView = document.getElementById('table-view');
 const tableBody = document.getElementById('table-body');
 const flashcardsView = document.getElementById('flashcards-view');
+const manageTabView = document.getElementById('manage-tab-view');
 const noResults = document.getElementById('no-results');
 
 const fileInput = document.getElementById('file-input');
@@ -119,7 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
   applyFiltersAndRender();
 });
 
-// Carregar Dados do localStorage
 function loadFromLocalStorage() {
   const saved = localStorage.getItem('chinese_srs_phrases');
   if (saved) {
@@ -132,7 +133,6 @@ function loadFromLocalStorage() {
     phrasesData = defaultPhrases;
   }
 
-  // Garantir estrutura dos campos SRS em cada frase
   phrasesData.forEach(p => {
     if (!p.srs) {
       p.srs = {
@@ -145,7 +145,6 @@ function loadFromLocalStorage() {
   });
 }
 
-// Salvar Dados no localStorage
 function saveToLocalStorage() {
   localStorage.setItem('chinese_srs_phrases', JSON.stringify(phrasesData));
 }
@@ -153,7 +152,7 @@ function saveToLocalStorage() {
 function setupEventListeners() {
   btnToggleTheme.addEventListener('click', toggleTheme);
 
-  // Troca de Abas Principais
+  // Navegação de Abas
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -177,7 +176,7 @@ function setupEventListeners() {
 
   sortBySelect.addEventListener('change', applyFiltersAndRender);
 
-  // Troca de Modos de Exibição (Cards, Tabela, Flashcards)
+  // Troca de Visões
   document.querySelectorAll('.view-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
@@ -187,7 +186,6 @@ function setupEventListeners() {
     });
   });
 
-  // Arquivos
   fileInput.addEventListener('change', handleFileUpload);
   btnExportJson.addEventListener('click', exportJSON);
 
@@ -231,41 +229,88 @@ function setupEventListeners() {
     }
   });
 
+  document.getElementById('m-btn-unmark').addEventListener('click', () => {
+    if (currentModalPhrase) {
+      unmarkStudied(currentModalPhrase.id);
+      closeModalDetails();
+    }
+  });
+
+  document.getElementById('m-btn-edit').addEventListener('click', () => {
+    if (currentModalPhrase) {
+      const phraseToEdit = { ...currentModalPhrase };
+      closeModalDetails();
+      openModalEdit(phraseToEdit);
+    }
+  });
+
+  document.getElementById('m-btn-delete').addEventListener('click', () => {
+    if (currentModalPhrase) {
+      const idToDelete = currentModalPhrase.id;
+      closeModalDetails();
+      deletePhrase(idToDelete);
+    }
+  });
+
   document.getElementById('m-audio-btn').addEventListener('click', () => {
     if (currentModalPhrase) speakChinese(currentModalPhrase.hanzi);
   });
 
-  // Modal Adicionar
+  // EVENTOS DOS BOTÕES DE OLHINHO E CLIQUE NO BLUR
+  setupBlurToggle('toggle-eye-hanzi', 'm-hanzi');
+  setupBlurToggle('toggle-eye-pinyin', 'm-pinyin');
+  setupBlurToggle('toggle-eye-traducao', 'm-traducao');
+
+  // Modal Adicionar/Editar
   btnAddPhrase.addEventListener('click', openModalAdd);
   modalAddCloseBtn.addEventListener('click', closeModalAdd);
   btnCancelAdd.addEventListener('click', closeModalAdd);
   modalAddPhrase.addEventListener('click', (e) => {
     if (e.target === modalAddPhrase) closeModalAdd();
   });
-  formAddPhrase.addEventListener('submit', handleAddPhrase);
+  formAddPhrase.addEventListener('submit', handleSavePhrase);
 
-  // Modal P2P Sync
+  // Modal P2P
   btnSyncP2P.addEventListener('click', openModalP2P);
   modalP2PClose.addEventListener('click', closeModalP2P);
   document.getElementById('btn-copy-id').addEventListener('click', copyPeerId);
   document.getElementById('btn-connect-peer').addEventListener('click', connectToRemotePeer);
 }
 
-// Algoritmo e Regra SRS
+// Configura o alternador de visibilidade (Olhinho / Clique no Texto)
+function setupBlurToggle(eyeBtnId, textElemId) {
+  const eyeBtn = document.getElementById(eyeBtnId);
+  const textElem = document.getElementById(textElemId);
+
+  if (eyeBtn && textElem) {
+    const toggle = (e) => {
+      e.stopPropagation();
+      textElem.classList.toggle('revealed');
+    };
+
+    eyeBtn.addEventListener('click', toggle);
+    textElem.addEventListener('click', toggle);
+  }
+}
+
+// Alternar blur em elementos gerados dinamicamente nos cards
+function toggleElementBlur(elemId) {
+  const elem = document.getElementById(elemId);
+  if (elem) elem.classList.toggle('revealed');
+}
+
+// Algoritmo SRS
 function markAsStudied(phraseId) {
   const item = phrasesData.find(p => p.id === phraseId);
   if (!item) return;
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Incrementar nível do SRS até o limite de 17
   let newLevel = (item.srs.nivel || 0) + 1;
   if (newLevel > MAX_SRS_LEVEL) newLevel = MAX_SRS_LEVEL;
 
-  // Calcular Dias da Tabela
   const daysToAdd = SRS_INTERVALS[newLevel] || 1;
 
-  // Próxima revisão = Hoje + Dias Adicionados (baseado na data de marcação)
   const nextRevDate = new Date();
   nextRevDate.setDate(nextRevDate.getDate() + daysToAdd);
   const nextRevStr = nextRevDate.toISOString().split('T')[0];
@@ -281,13 +326,46 @@ function markAsStudied(phraseId) {
   updateDashboardAndCounts();
   applyFiltersAndRender();
 
-  // Enviar atualização P2P se houver conexão ativa
   if (peerConn && peerConn.open) {
     peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
   }
 }
 
-// Lógica de Dark Mode
+// Desfazer Estudo
+function unmarkStudied(phraseId) {
+  const item = phrasesData.find(p => p.id === phraseId);
+  if (!item) return;
+
+  item.srs = {
+    nivel: 0,
+    dataEstudo: null,
+    proximaRevisao: null,
+    totalEstudos: 0
+  };
+
+  saveToLocalStorage();
+  updateDashboardAndCounts();
+  applyFiltersAndRender();
+
+  if (peerConn && peerConn.open) {
+    peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+  }
+}
+
+// Excluir Frase
+function deletePhrase(phraseId) {
+  if (confirm(`Tem certeza que deseja excluir permanentemente a frase #${phraseId}?`)) {
+    phrasesData = phrasesData.filter(p => p.id !== phraseId);
+    saveToLocalStorage();
+    updateDashboardAndCounts();
+    applyFiltersAndRender();
+
+    if (peerConn && peerConn.open) {
+      peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+    }
+  }
+}
+
 function initTheme() {
   const savedTheme = localStorage.getItem('theme');
   if (savedTheme === 'dark') {
@@ -305,44 +383,59 @@ function toggleTheme() {
   localStorage.setItem('theme', isDark ? 'dark' : 'light');
 }
 
-// Atualização dos Contadores e Dashboard
+// Contadores e Resumos
 function updateDashboardAndCounts() {
   const todayStr = new Date().toISOString().split('T')[0];
 
   const total = phrasesData.length;
 
-  // Frases do Dia: Nunca estudadas OU com data de revisão menor/igual a hoje
-  const todayList = phrasesData.filter(p => {
-    return !p.srs.dataEstudo || p.srs.proximaRevisao <= todayStr;
-  });
-
-  // Frases Estudadas: Tiverem ao menos 1 registro de dataEstudo
+  const newPhrases = phrasesData.filter(p => !p.srs.dataEstudo);
+  const todayList = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao <= todayStr);
+  const futureList = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao > todayStr);
   const studiedList = phrasesData.filter(p => p.srs.dataEstudo !== null);
 
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-due').textContent = todayList.length;
-  document.getElementById('stat-studied').textContent = studiedList.length;
-
-  document.getElementById('count-all').textContent = total;
+  document.getElementById('count-all').textContent = newPhrases.length;
   document.getElementById('count-today').textContent = todayList.length;
+  document.getElementById('count-future').textContent = futureList.length;
   document.getElementById('count-studied').textContent = studiedList.length;
+
+  document.getElementById('m-stat-total').textContent = total;
+  document.getElementById('m-stat-new').textContent = newPhrases.length;
+  document.getElementById('m-stat-due').textContent = todayList.length;
+  document.getElementById('m-stat-future').textContent = futureList.length;
+  document.getElementById('m-stat-studied').textContent = studiedList.length;
 }
 
-// Filtros e Seleção da Aba Ativa
+// Filtros e Renderização por Aba
 function applyFiltersAndRender() {
   const query = searchInput.value.toLowerCase().trim();
   const sortVal = sortBySelect.value;
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. Filtrar pela Aba Ativa
-  let tabPhrases = [...phrasesData];
-  if (currentMainTab === 'today') {
-    tabPhrases = phrasesData.filter(p => !p.srs.dataEstudo || p.srs.proximaRevisao <= todayStr);
+  if (currentMainTab === 'manage') {
+    mainToolbar.classList.add('hidden');
+    cardsView.classList.add('hidden');
+    tableView.classList.add('hidden');
+    flashcardsView.classList.add('hidden');
+    noResults.classList.add('hidden');
+    manageTabView.classList.remove('hidden');
+    return;
+  }
+
+  manageTabView.classList.add('hidden');
+  mainToolbar.classList.remove('hidden');
+
+  let tabPhrases = [];
+  if (currentMainTab === 'all') {
+    tabPhrases = phrasesData.filter(p => !p.srs.dataEstudo);
+  } else if (currentMainTab === 'today') {
+    tabPhrases = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao <= todayStr);
+  } else if (currentMainTab === 'future') {
+    tabPhrases = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao > todayStr);
   } else if (currentMainTab === 'studied') {
     tabPhrases = phrasesData.filter(p => p.srs.dataEstudo !== null);
   }
 
-  // 2. Filtrar pela busca por Texto
   filteredPhrases = tabPhrases.filter(item => {
     return (
       item.id.toString().includes(query) ||
@@ -352,7 +445,6 @@ function applyFiltersAndRender() {
     );
   });
 
-  // 3. Ordenação
   filteredPhrases.sort((a, b) => {
     switch (sortVal) {
       case 'id-asc': return a.id - b.id;
@@ -390,7 +482,7 @@ function renderCurrentView() {
   }
 }
 
-// View: Cards Grid
+// View: Cards Grid (com Blur por Padrão)
 function renderCardsView() {
   cardsView.innerHTML = '';
   filteredPhrases.forEach(item => {
@@ -398,6 +490,7 @@ function renderCardsView() {
     card.className = 'phrase-card';
     card.onclick = () => openModalDetails(item);
 
+    const isStudied = item.srs.dataEstudo !== null;
     const isStudiedToday = item.srs.dataEstudo === new Date().toISOString().split('T')[0];
 
     card.innerHTML = `
@@ -407,16 +500,42 @@ function renderCardsView() {
           <button class="btn-icon" title="Ouvir" onclick="event.stopPropagation(); speakChinese('${escapeQuotes(item.hanzi)}')">
             <i class="fa-solid fa-volume-high"></i>
           </button>
+          <button class="btn-icon" title="Editar Frase" onclick="event.stopPropagation(); openModalEditById(${item.id})">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <button class="btn-icon danger" title="Excluir Frase" onclick="event.stopPropagation(); deletePhrase(${item.id})">
+            <i class="fa-solid fa-trash"></i>
+          </button>
         </div>
       </div>
-      <div class="card-hanzi">${item.hanzi}</div>
-      <div class="card-pinyin">${item.pinyin}</div>
-      <div class="card-traducao">${item.traducao}</div>
+
+      <div class="card-blur-row">
+        <div class="card-hanzi blur-text" id="card-hz-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('card-hz-${item.id}')">${item.hanzi}</div>
+        <button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-hz-${item.id}')" title="Mostrar/Ocultar Hanzi">👁️</button>
+      </div>
+
+      <div class="card-blur-row">
+        <div class="card-pinyin blur-text" id="card-py-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('card-py-${item.id}')">${item.pinyin}</div>
+        <button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-py-${item.id}')" title="Mostrar/Ocultar Pinyin">👁️</button>
+      </div>
+
+      <div class="card-blur-row">
+        <div class="card-traducao blur-text" id="card-tr-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('card-tr-${item.id}')">${item.traducao}</div>
+        <button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-tr-${item.id}')" title="Mostrar/Ocultar Tradução">👁️</button>
+      </div>
+
       <div class="card-footer">
-        <span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">Nível SRS: ${item.srs.nivel}/17</span>
-        <button class="btn ${isStudiedToday ? 'btn-secondary' : 'btn-success'}" style="padding: 0.2rem 0.5rem; font-size:0.75rem;" onclick="event.stopPropagation(); markAsStudied(${item.id})">
-          <i class="fa-solid fa-check"></i> ${isStudiedToday ? 'Estudado Hoje' : 'Marcar Estudado'}
-        </button>
+        <span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">Nível: ${item.srs.nivel}/17</span>
+        <div class="card-actions-row">
+          ${isStudied ? `
+            <button class="btn btn-secondary" style="padding: 0.2rem 0.4rem; font-size:0.75rem;" title="Remover de estudadas / Desfazer" onclick="event.stopPropagation(); unmarkStudied(${item.id})">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          ` : ''}
+          <button class="btn ${isStudiedToday ? 'btn-secondary' : 'btn-success'}" style="padding: 0.2rem 0.5rem; font-size:0.75rem;" onclick="event.stopPropagation(); markAsStudied(${item.id})">
+            <i class="fa-solid fa-check"></i> ${isStudiedToday ? 'Estudado Hoje' : 'Marcar Estudado'}
+          </button>
+        </div>
       </div>
     `;
     cardsView.appendChild(card);
@@ -430,11 +549,13 @@ function renderTableView() {
     const tr = document.createElement('tr');
     tr.onclick = () => openModalDetails(item);
 
+    const isStudied = item.srs.dataEstudo !== null;
+
     tr.innerHTML = `
       <td><b>#${item.id}</b></td>
-      <td class="td-hanzi">${item.hanzi}</td>
-      <td class="td-pinyin">${item.pinyin}</td>
-      <td>${item.traducao}</td>
+      <td class="td-hanzi blur-text" id="tbl-hz-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('tbl-hz-${item.id}')">${item.hanzi}</td>
+      <td class="td-pinyin blur-text" id="tbl-py-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('tbl-py-${item.id}')">${item.pinyin}</td>
+      <td class="blur-text" id="tbl-tr-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('tbl-tr-${item.id}')">${item.traducao}</td>
       <td><span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">${item.srs.nivel} / 17</span></td>
       <td>${item.srs.proximaRevisao || 'Pendente'}</td>
       <td>
@@ -443,6 +564,12 @@ function renderTableView() {
         </button>
         <button class="btn-icon" title="Marcar Estudado" onclick="event.stopPropagation(); markAsStudied(${item.id})">
           <i class="fa-solid fa-check" style="color: var(--success-color);"></i>
+        </button>
+        <button class="btn-icon" title="Editar" onclick="event.stopPropagation(); openModalEditById(${item.id})">
+          <i class="fa-solid fa-pen"></i>
+        </button>
+        <button class="btn-icon danger" title="Excluir" onclick="event.stopPropagation(); deletePhrase(${item.id})">
+          <i class="fa-solid fa-trash"></i>
         </button>
       </td>
     `;
@@ -464,7 +591,7 @@ function renderFlashcard() {
   document.getElementById('fc-traducao').textContent = item.traducao;
 
   document.getElementById('fc-srs-lvl').textContent = `${item.srs.nivel} / 17`;
-  document.getElementById('fc-srs-next').textContent = item.srs.proximaRevisao || 'Hoje';
+  document.getElementById('fc-srs-next').textContent = item.srs.proximaRevisao || 'Pendente';
 }
 
 function toggleFlashcardFlip() {
@@ -489,14 +616,30 @@ function nextFlashcard() {
 function openModalDetails(item) {
   currentModalPhrase = item;
   document.getElementById('m-id').textContent = `#${item.id}`;
-  document.getElementById('m-hanzi').textContent = item.hanzi;
-  document.getElementById('m-pinyin').textContent = item.pinyin;
-  document.getElementById('m-traducao').textContent = item.traducao;
+  
+  const hanziElem = document.getElementById('m-hanzi');
+  const pinyinElem = document.getElementById('m-pinyin');
+  const traducaoElem = document.getElementById('m-traducao');
+
+  hanziElem.textContent = item.hanzi;
+  pinyinElem.textContent = item.pinyin;
+  traducaoElem.textContent = item.traducao;
+
+  hanziElem.classList.remove('revealed');
+  pinyinElem.classList.remove('revealed');
+  traducaoElem.classList.remove('revealed');
 
   document.getElementById('m-srs-lvl').textContent = `${item.srs.nivel} / 17`;
   document.getElementById('m-srs-last').textContent = item.srs.dataEstudo || 'Nunca estudado';
   document.getElementById('m-srs-next').textContent = item.srs.proximaRevisao || 'Pendente';
   document.getElementById('m-srs-count').textContent = item.srs.totalEstudos || 0;
+
+  const btnUnmark = document.getElementById('m-btn-unmark');
+  if (item.srs.dataEstudo !== null) {
+    btnUnmark.classList.remove('hidden');
+  } else {
+    btnUnmark.classList.add('hidden');
+  }
 
   modalDetails.classList.add('active');
 }
@@ -506,9 +649,26 @@ function closeModalDetails() {
   currentModalPhrase = null;
 }
 
-// Modal Adicionar Frase
+// Modal Adicionar / Editar
 function openModalAdd() {
   formAddPhrase.reset();
+  document.getElementById('edit-phrase-id').value = '';
+  document.getElementById('modal-add-title').innerHTML = '<i class="fa-solid fa-plus-circle"></i> Nova Frase';
+  modalAddPhrase.classList.add('active');
+}
+
+function openModalEditById(id) {
+  const item = phrasesData.find(p => p.id === id);
+  if (item) openModalEdit(item);
+}
+
+function openModalEdit(item) {
+  document.getElementById('edit-phrase-id').value = item.id;
+  document.getElementById('add-hanzi').value = item.hanzi;
+  document.getElementById('add-pinyin').value = item.pinyin;
+  document.getElementById('add-traducao').value = item.traducao;
+
+  document.getElementById('modal-add-title').innerHTML = `<i class="fa-solid fa-pen"></i> Editar Frase #${item.id}`;
   modalAddPhrase.classList.add('active');
 }
 
@@ -516,39 +676,51 @@ function closeModalAdd() {
   modalAddPhrase.classList.remove('active');
 }
 
-function handleAddPhrase(event) {
+function handleSavePhrase(event) {
   event.preventDefault();
 
+  const editId = document.getElementById('edit-phrase-id').value;
   const hanzi = document.getElementById('add-hanzi').value.trim();
   const pinyin = document.getElementById('add-pinyin').value.trim();
   const traducao = document.getElementById('add-traducao').value.trim();
 
   if (!hanzi || !pinyin || !traducao) return;
 
-  const newId = phrasesData.length > 0 ? Math.max(...phrasesData.map(p => p.id)) + 1 : 1;
-
-  const newPhrase = {
-    id: newId,
-    hanzi: hanzi,
-    pinyin: pinyin,
-    traducao: traducao,
-    srs: {
-      nivel: 0,
-      dataEstudo: null,
-      proximaRevisao: null,
-      totalEstudos: 0
+  if (editId) {
+    const item = phrasesData.find(p => p.id === parseInt(editId));
+    if (item) {
+      item.hanzi = hanzi;
+      item.pinyin = pinyin;
+      item.traducao = traducao;
     }
-  };
+  } else {
+    const newId = phrasesData.length > 0 ? Math.max(...phrasesData.map(p => p.id)) + 1 : 1;
+    const newPhrase = {
+      id: newId,
+      hanzi: hanzi,
+      pinyin: pinyin,
+      traducao: traducao,
+      srs: {
+        nivel: 0,
+        dataEstudo: null,
+        proximaRevisao: null,
+        totalEstudos: 0
+      }
+    };
+    phrasesData.push(newPhrase);
+  }
 
-  phrasesData.push(newPhrase);
   saveToLocalStorage();
-
   closeModalAdd();
   updateDashboardAndCounts();
   applyFiltersAndRender();
+
+  if (peerConn && peerConn.open) {
+    peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+  }
 }
 
-// Síntese de Voz (Mandarim)
+// Voz Mandarim
 function speakChinese(text) {
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
@@ -591,7 +763,7 @@ function exportJSON() {
   downloadAnchor.remove();
 }
 
-// Gerador de Código Curto para P2P (6 Caracteres)
+// Gerador Código Curto P2P
 function generateShortCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -601,21 +773,19 @@ function generateShortCode() {
   return code;
 }
 
-// Cross-Device P2P Sync Direct (PeerJS WebRTC com Código Curto)
+// P2P Sync
 function openModalP2P() {
   modalP2P.classList.add('active');
 
   if (!peer) {
     document.getElementById('my-peer-id').textContent = 'Gerando código...';
     
-    // Gera um ID curto aleatório (exemplo: CHIN-A8K2M9)
     const shortId = 'CHIN-' + generateShortCode();
     peer = new Peer(shortId);
 
     peer.on('open', (id) => {
       document.getElementById('my-peer-id').textContent = id;
       
-      // Gerar QR Code com o ID curto
       const qrElem = document.getElementById('qrcode-container');
       qrElem.innerHTML = '';
       new QRCode(qrElem, { text: id, width: 128, height: 128 });
@@ -625,7 +795,7 @@ function openModalP2P() {
       if (err.type === 'unavailable-id') {
         peer.destroy();
         peer = null;
-        openModalP2P(); // Tenta gerar um novo ID curto em caso de colisão rara
+        openModalP2P();
       }
     });
 
@@ -644,7 +814,7 @@ function copyPeerId() {
   const idText = document.getElementById('my-peer-id').textContent;
   if (idText && !idText.includes('Gerando')) {
     navigator.clipboard.writeText(idText);
-    alert('Código copiado para a área de transferência!');
+    alert('Código copiado!');
   }
 }
 
@@ -652,14 +822,14 @@ function connectToRemotePeer() {
   const remoteId = document.getElementById('remote-peer-id').value.trim();
   if (!remoteId || !peer) return;
 
-  document.getElementById('p2p-status').textContent = 'Conectando ao outro dispositivo...';
+  document.getElementById('p2p-status').textContent = 'Conectando...';
   peerConn = peer.connect(remoteId);
   setupPeerConnectionListeners();
 }
 
 function setupPeerConnectionListeners() {
   peerConn.on('open', () => {
-    document.getElementById('p2p-status').textContent = 'Conectado! Sincronizando dados...';
+    document.getElementById('p2p-status').textContent = 'Conectado! Sincronizando...';
     peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
   });
 
@@ -674,7 +844,7 @@ function setupPeerConnectionListeners() {
   });
 
   peerConn.on('close', () => {
-    document.getElementById('p2p-status').textContent = 'Conexão finalizada.';
+    document.getElementById('p2p-status').textContent = 'Conexão encerrada.';
   });
 }
 

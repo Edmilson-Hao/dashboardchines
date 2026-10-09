@@ -2,24 +2,24 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visualizador de Frases em Chinês</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Estudo de Chinês SRS</title>
   
-  <!-- Fontes Google e Icons FontAwesome -->
+  <!-- Google Fonts e FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- PeerJS para Sincronização P2P e QRCode Generator -->
+  <!-- PeerJS P2P e QRCode -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
 
-  <!-- Topbar / Header -->
+  <!-- Topbar Limpo -->
   <header class="header">
     <div class="header-container">
       <div class="logo">
@@ -27,102 +27,114 @@
         <h1>Estudo de Chinês <span>SRS</span></h1>
       </div>
       <div class="header-actions">
-        <button id="btn-sync-p2p" class="btn btn-outline" title="Sincronizar entre Dispositivos (P2P)">
-          <i class="fa-solid fa-network-wired"></i> Sincronizar P2P
-        </button>
-        <button id="btn-toggle-theme" class="btn btn-outline" title="Alternar Modo Escuro">
+        <button id="btn-toggle-theme" class="btn btn-icon-only" title="Alternar Tema">
           <i class="fa-solid fa-moon" id="theme-icon"></i>
         </button>
         <button id="btn-add-phrase" class="btn btn-success">
-          <i class="fa-solid fa-plus"></i> Adicionar Frase
+          <i class="fa-solid fa-plus"></i> <span class="hide-mobile">Nova Frase</span>
         </button>
-        <button id="btn-export-json" class="btn btn-outline" title="Baixar JSON das frases atuais">
-          <i class="fa-solid fa-download"></i> Exportar
-        </button>
-        <label class="btn btn-secondary cursor-pointer">
-          <i class="fa-solid fa-upload"></i> Importar
-          <input type="file" id="file-input" accept=".json,.txt" style="display:none;" />
-        </label>
       </div>
     </div>
   </header>
 
-  <!-- Navegação por Abas Principais -->
+  <!-- Navegação de Abas -->
   <nav class="main-tabs-container">
     <div class="main-tabs">
-      <button class="tab-btn active" data-tab="all"><i class="fa-solid fa-layer-group"></i> Todas as Frases (<span id="count-all">0</span>)</button>
-      <button class="tab-btn" data-tab="today"><i class="fa-solid fa-calendar-check"></i> Estudos do Dia (<span id="count-today">0</span>)</button>
-      <button class="tab-btn" data-tab="studied"><i class="fa-solid fa-circle-check"></i> Frases Estudadas (<span id="count-studied">0</span>)</button>
+      <button class="tab-btn active" data-tab="all">
+        <i class="fa-solid fa-layer-group"></i> <span>Aprender (<b id="count-all">0</b>)</span>
+      </button>
+      <button class="tab-btn" data-tab="today">
+        <i class="fa-solid fa-calendar-check"></i> <span>Estudos do Dia (<b id="count-today">0</b>)</span>
+      </button>
+      <button class="tab-btn" data-tab="future">
+        <i class="fa-solid fa-calendar-days"></i> <span>Futuras (<b id="count-future">0</b>)</span>
+      </button>
+      <button class="tab-btn" data-tab="studied">
+        <i class="fa-solid fa-circle-check"></i> <span>Estudadas (<b id="count-studied">0</b>)</span>
+      </button>
+      <button class="tab-btn" data-tab="manage">
+        <i class="fa-solid fa-sliders"></i> <span>Gerenciamento</span>
+      </button>
     </div>
   </nav>
 
   <!-- Conteúdo Principal -->
   <main class="main-container">
     
-    <!-- Dashboard Stats -->
-    <section class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon bg-primary"><i class="fa-solid fa-book-open"></i></div>
-        <div class="stat-info">
-          <span class="stat-value" id="stat-total">0</span>
-          <span class="stat-label">Total no Acervo</span>
+    <!-- ABA DE GERENCIAMENTO -->
+    <section id="manage-tab-view" class="manage-grid hidden">
+      <div class="manage-card">
+        <h3><i class="fa-solid fa-network-wired"></i> Sincronização P2P Direct</h3>
+        <p>Sincronize suas frases diretamente entre celular e computador sem servidor intermediário.</p>
+        <button id="btn-sync-p2p" class="btn btn-primary btn-full">
+          <i class="fa-solid fa-qrcode"></i> Abrir Conexão P2P
+        </button>
+      </div>
+
+      <div class="manage-card">
+        <h3><i class="fa-solid fa-file-import"></i> Backup e Restauração</h3>
+        <p>Exporte o seu progresso em arquivo JSON ou importe dados de outros dispositivos.</p>
+        <div class="manage-actions-dual">
+          <button id="btn-export-json" class="btn btn-outline">
+            <i class="fa-solid fa-download"></i> Exportar
+          </button>
+          <label class="btn btn-secondary cursor-pointer">
+            <i class="fa-solid fa-upload"></i> Importar
+            <input type="file" id="file-input" accept=".json,.txt" style="display:none;" />
+          </label>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon bg-warning"><i class="fa-solid fa-clock-rotate-left"></i></div>
-        <div class="stat-info">
-          <span class="stat-value" id="stat-due">0</span>
-          <span class="stat-label">Para Estudar Hoje</span>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon bg-success"><i class="fa-solid fa-graduation-cap"></i></div>
-        <div class="stat-info">
-          <span class="stat-value" id="stat-studied">0</span>
-          <span class="stat-label">Já Estudadas</span>
+
+      <div class="manage-card">
+        <h3><i class="fa-solid fa-chart-pie"></i> Resumo do Acervo</h3>
+        <div class="manage-stats-rows">
+          <div class="m-stat-row"><span>Total no Acervo:</span> <strong id="m-stat-total">0</strong></div>
+          <div class="m-stat-row"><span>Novas Frases (Nível 0):</span> <strong id="m-stat-new">0</strong></div>
+          <div class="m-stat-row"><span>Para Estudar Hoje:</span> <strong id="m-stat-due">0</strong></div>
+          <div class="m-stat-row"><span>Revisões Futuras:</span> <strong id="m-stat-future">0</strong></div>
+          <div class="m-stat-row"><span>Frases no SRS (Iniciadas):</span> <strong id="m-stat-studied">0</strong></div>
         </div>
       </div>
     </section>
 
-    <!-- Barra de Ferramentas: Busca e Modos de Exibição -->
-    <section class="toolbar">
+    <!-- BARRA DE FERRAMENTAS -->
+    <section class="toolbar" id="main-toolbar">
       <div class="search-box">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" id="search-input" placeholder="Buscar por Hanzi, Pinyin, Tradução ou ID..." />
+        <input type="text" id="search-input" placeholder="Buscar por Hanzi, Pinyin, Tradução..." />
         <button id="btn-clear-search" class="clear-btn" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
       <div class="filter-group">
         <select id="sort-by">
-          <option value="id-asc">Ordem: ID (Crescente)</option>
-          <option value="id-desc">Ordem: ID (Decrescente)</option>
+          <option value="id-asc">ID (Crescente)</option>
+          <option value="id-desc">ID (Decrescente)</option>
           <option value="level-desc">SRS: Maior Nível</option>
           <option value="next-rev-asc">Próxima Revisão</option>
         </select>
 
-        <!-- Seletor de Exibição -->
         <div class="view-toggle">
-          <button class="view-btn active" data-view="cards" title="Visualização em Cards"><i class="fa-solid fa-border-all"></i></button>
-          <button class="view-btn" data-view="table" title="Visualização em Tabela"><i class="fa-solid fa-table-list"></i></button>
-          <button class="view-btn" data-view="flashcards" title="Modo Flashcards"><i class="fa-solid fa-clone"></i></button>
+          <button class="view-btn active" data-view="cards" title="Cards"><i class="fa-solid fa-border-all"></i></button>
+          <button class="view-btn" data-view="table" title="Tabela"><i class="fa-solid fa-table-list"></i></button>
+          <button class="view-btn" data-view="flashcards" title="Flashcards"><i class="fa-solid fa-clone"></i></button>
         </div>
       </div>
     </section>
 
-    <!-- Área de Conteúdo de Exibição -->
+    <!-- ÁREAS DE VISUALIZAÇÃO -->
     <section id="cards-view" class="cards-grid"></section>
 
     <section id="table-view" class="table-container hidden">
       <table class="data-table">
         <thead>
           <tr>
-            <th width="60">ID</th>
+            <th width="50">ID</th>
             <th>Hanzi (Chinês)</th>
             <th>Pinyin</th>
             <th>Tradução</th>
-            <th width="110">Nível SRS</th>
-            <th width="130">Próx. Revisão</th>
-            <th width="120">Ações</th>
+            <th width="90">Nível SRS</th>
+            <th width="110">Próx. Revisão</th>
+            <th width="140">Ações</th>
           </tr>
         </thead>
         <tbody id="table-body"></tbody>
@@ -138,7 +150,7 @@
         <div class="flashcard" id="flashcard">
           <div class="flashcard-inner">
             <div class="flashcard-front">
-              <span class="fc-badge">Clique para revelar</span>
+              <span class="fc-badge">Toque para virar</span>
               <div class="fc-hanzi" id="fc-hanzi">---</div>
               <button class="btn-audio-fc" id="fc-audio-btn" title="Ouvir pronúncia">
                 <i class="fa-solid fa-volume-high"></i>
@@ -156,15 +168,14 @@
         </div>
 
         <div class="flashcard-actions">
-          <button id="fc-prev" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Anterior</button>
+          <button id="fc-prev" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i></button>
           <button id="fc-mark-studied" class="btn btn-success"><i class="fa-solid fa-check"></i> Marcar Estudado</button>
           <button id="fc-flip" class="btn btn-primary"><i class="fa-solid fa-rotate"></i> Virar</button>
-          <button id="fc-next" class="btn btn-secondary">Próxima <i class="fa-solid fa-arrow-right"></i></button>
+          <button id="fc-next" class="btn btn-secondary"><i class="fa-solid fa-arrow-right"></i></button>
         </div>
       </div>
     </section>
 
-    <!-- Mensagem caso não encontre frases -->
     <div id="no-results" class="no-results hidden">
       <i class="fa-solid fa-folder-open"></i>
       <p>Nenhuma frase encontrada nesta seção.</p>
@@ -172,7 +183,7 @@
 
   </main>
 
-  <!-- Modal de Detalhes da Frase -->
+  <!-- Modal Detalhes com Efeito Blur e Olhinhos -->
   <div class="modal-overlay" id="modal-details">
     <div class="modal-card">
       <button class="modal-close" id="modal-close-btn"><i class="fa-solid fa-xmark"></i></button>
@@ -181,21 +192,37 @@
         <h2>Detalhes da Frase</h2>
       </div>
       <div class="modal-body">
+        
+        <!-- HANZI BOX -->
         <div class="m-hanzi-box">
-          <div class="m-hanzi" id="m-hanzi">---</div>
+          <div class="m-blur-wrapper">
+            <div class="m-hanzi blur-text" id="m-hanzi">---</div>
+            <button class="btn-eye" id="toggle-eye-hanzi" title="Mostrar/Ocultar Hanzi">👁️</button>
+          </div>
           <button class="btn-audio-lg" id="m-audio-btn"><i class="fa-solid fa-volume-high"></i> Ouvir Pronúncia</button>
         </div>
+
+        <!-- PINYIN FIELD -->
         <div class="m-field">
-          <label>Pinyin:</label>
-          <div class="m-value pinyin" id="m-pinyin">---</div>
-        </div>
-        <div class="m-field">
-          <label>Tradução em Português:</label>
-          <div class="m-value" id="m-traducao">---</div>
+          <div class="m-field-header">
+            <label>PINYIN:</label>
+            <button class="btn-eye" id="toggle-eye-pinyin" title="Mostrar/Ocultar Pinyin">👁️</button>
+          </div>
+          <div class="m-value pinyin blur-text" id="m-pinyin">---</div>
         </div>
 
+        <!-- TRADUÇÃO FIELD -->
+        <div class="m-field">
+          <div class="m-field-header">
+            <label>TRADUÇÃO EM PORTUGUÊS:</label>
+            <button class="btn-eye" id="toggle-eye-traducao" title="Mostrar/Ocultar Tradução">👁️</button>
+          </div>
+          <div class="m-value blur-text" id="m-traducao">---</div>
+        </div>
+
+        <!-- SRS HISTÓRICO -->
         <div class="m-srs-box">
-          <h3><i class="fa-solid fa-clock-rotate-left"></i> Informações do Estudo</h3>
+          <h3><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Estudo</h3>
           <div class="srs-row"><span>Nível SRS:</span> <strong id="m-srs-lvl">0 / 17</strong></div>
           <div class="srs-row"><span>Último Estudo:</span> <span id="m-srs-last">-</span></div>
           <div class="srs-row"><span>Próximo Estudo:</span> <span id="m-srs-next" class="highlight-date">-</span></div>
@@ -203,22 +230,28 @@
         </div>
 
         <div class="m-actions">
-          <button id="m-btn-mark" class="btn btn-success btn-full"><i class="fa-solid fa-check"></i> Marcar Como Estudado Hoje</button>
+          <button id="m-btn-mark" class="btn btn-success btn-full" style="margin-bottom: 0.5rem;"><i class="fa-solid fa-check"></i> Marcar Como Estudado Hoje</button>
+          <button id="m-btn-unmark" class="btn btn-secondary btn-full hidden" style="margin-bottom: 0.5rem;"><i class="fa-solid fa-rotate-left"></i> Desfazer Estudo (Voltar a Aprender)</button>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <button id="m-btn-edit" class="btn btn-outline"><i class="fa-solid fa-pen"></i> Editar</button>
+            <button id="m-btn-delete" class="btn btn-danger"><i class="fa-solid fa-trash"></i> Excluir</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Modal de Adicionar Nova Frase -->
+  <!-- Modal Adicionar / Editar Frase -->
   <div class="modal-overlay" id="modal-add-phrase">
     <div class="modal-card modal-form">
       <button class="modal-close" id="modal-add-close-btn"><i class="fa-solid fa-xmark"></i></button>
       <div class="modal-header">
-        <h2><i class="fa-solid fa-plus-circle"></i> Adicionar Nova Frase</h2>
+        <h2 id="modal-add-title"><i class="fa-solid fa-plus-circle"></i> Nova Frase</h2>
       </div>
       <form id="form-add-phrase" class="modal-body form-body">
+        <input type="hidden" id="edit-phrase-id" value="" />
         <div class="form-group">
-          <label for="add-hanzi">Hanzi (Ideogramas em Chinês) *</label>
+          <label for="add-hanzi">Hanzi (Chinês) *</label>
           <input type="text" id="add-hanzi" required placeholder="Ex: 我想去超市买两个苹果。" />
         </div>
         <div class="form-group">
@@ -226,24 +259,24 @@
           <input type="text" id="add-pinyin" required placeholder="Ex: Wǒ xiǎng qù chāoshì mǎi liǎng ge píngguǒ." />
         </div>
         <div class="form-group">
-          <label for="add-traducao">Tradução em Português *</label>
-          <input type="text" id="add-traducao" required placeholder="Ex: Eu quero ir ao supermercado comprar duas maçãs." />
+          <label for="add-traducao">Tradução *</label>
+          <input type="text" id="add-traducao" required placeholder="Ex: Eu quero ir ao supermercado..." />
         </div>
 
         <div class="form-actions">
           <button type="button" class="btn btn-secondary" id="btn-cancel-add">Cancelar</button>
-          <button type="submit" class="btn btn-success"><i class="fa-solid fa-check"></i> Salvar Frase</button>
+          <button type="submit" class="btn btn-success" id="btn-save-phrase"><i class="fa-solid fa-check"></i> Salvar</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal de Sincronização P2P (PeerJS) -->
+  <!-- Modal P2P Sync -->
   <div class="modal-overlay" id="modal-p2p">
     <div class="modal-card">
       <button class="modal-close" id="modal-p2p-close"><i class="fa-solid fa-xmark"></i></button>
       <div class="modal-header">
-        <h2><i class="fa-solid fa-network-wired"></i> Sincronização P2P Direta</h2>
+        <h2><i class="fa-solid fa-network-wired"></i> Sincronização P2P</h2>
       </div>
       <div class="modal-body p2p-container">
         <div class="p2p-section">
@@ -260,7 +293,7 @@
         <div class="p2p-section">
           <h3>Conectar a Outro Dispositivo:</h3>
           <div class="p2p-connect-form">
-            <input type="text" id="remote-peer-id" placeholder="Cole o código do outro aparelho aqui..." />
+            <input type="text" id="remote-peer-id" placeholder="Ex: CHIN-A8K2M9" />
             <button id="btn-connect-peer" class="btn btn-primary"><i class="fa-solid fa-link"></i> Conectar e Sincronizar</button>
           </div>
         </div>
@@ -270,6 +303,6 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <script src="script.js?v=6"></script>
 </body>
 </html>
