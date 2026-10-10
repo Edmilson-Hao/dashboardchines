@@ -94,6 +94,7 @@ const noResults = document.getElementById('no-results');
 
 const fileInput = document.getElementById('file-input');
 const btnExportJson = document.getElementById('btn-export-json');
+const btnResetSystem = document.getElementById('btn-reset-system');
 
 const btnToggleTheme = document.getElementById('btn-toggle-theme');
 const themeIcon = document.getElementById('theme-icon');
@@ -188,6 +189,7 @@ function setupEventListeners() {
 
   fileInput.addEventListener('change', handleFileUpload);
   btnExportJson.addEventListener('click', exportJSON);
+  btnResetSystem.addEventListener('click', resetSystemMemory);
 
   // Controles do Flashcard
   document.getElementById('flashcard').addEventListener('click', toggleFlashcardFlip);
@@ -256,7 +258,7 @@ function setupEventListeners() {
     if (currentModalPhrase) speakChinese(currentModalPhrase.hanzi);
   });
 
-  // EVENTOS DOS BOTÕES DE OLHINHO E CLIQUE NO BLUR
+  // EVENTOS DOS BOTÕES DE OLHINHO NO MODAL
   setupBlurToggle('toggle-eye-hanzi', 'm-hanzi');
   setupBlurToggle('toggle-eye-pinyin', 'm-pinyin');
   setupBlurToggle('toggle-eye-traducao', 'm-traducao');
@@ -277,26 +279,39 @@ function setupEventListeners() {
   document.getElementById('btn-connect-peer').addEventListener('click', connectToRemotePeer);
 }
 
-// Configura o alternador de visibilidade (Olhinho / Clique no Texto)
+// Configura o alternador de visibilidade apenas pelo botão de olhinho
 function setupBlurToggle(eyeBtnId, textElemId) {
   const eyeBtn = document.getElementById(eyeBtnId);
   const textElem = document.getElementById(textElemId);
 
   if (eyeBtn && textElem) {
-    const toggle = (e) => {
+    eyeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       textElem.classList.toggle('revealed');
-    };
-
-    eyeBtn.addEventListener('click', toggle);
-    textElem.addEventListener('click', toggle);
+    });
   }
 }
 
-// Alternar blur em elementos gerados dinamicamente nos cards
+// Alternar blur nos cards via botão de olhinho
 function toggleElementBlur(elemId) {
   const elem = document.getElementById(elemId);
   if (elem) elem.classList.toggle('revealed');
+}
+
+// Resetar Memória do Sistema
+function resetSystemMemory() {
+  if (confirm("⚠️ ATENÇÃO: Deseja realmente resetar a memória do sistema? Todos os seus dados atuais e progresso de estudo serão apagados e as frases padrão serão restauradas.")) {
+    localStorage.removeItem('chinese_srs_phrases');
+    phrasesData = JSON.parse(JSON.stringify(defaultPhrases));
+    saveToLocalStorage();
+    updateDashboardAndCounts();
+    applyFiltersAndRender();
+    alert("Sistema resetado com sucesso para as configurações padrão!");
+
+    if (peerConn && peerConn.open) {
+      peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+    }
+  }
 }
 
 // Algoritmo SRS
@@ -482,9 +497,11 @@ function renderCurrentView() {
   }
 }
 
-// View: Cards Grid (com Blur por Padrão)
+// View: Cards Grid (Blur e botão de olhinho APENAS na aba 'today')
 function renderCardsView() {
   cardsView.innerHTML = '';
+  const isTodayTab = (currentMainTab === 'today');
+
   filteredPhrases.forEach(item => {
     const card = document.createElement('div');
     card.className = 'phrase-card';
@@ -492,6 +509,8 @@ function renderCardsView() {
 
     const isStudied = item.srs.dataEstudo !== null;
     const isStudiedToday = item.srs.dataEstudo === new Date().toISOString().split('T')[0];
+
+    const blurClass = isTodayTab ? 'blur-text' : '';
 
     card.innerHTML = `
       <div class="card-header">
@@ -510,18 +529,18 @@ function renderCardsView() {
       </div>
 
       <div class="card-blur-row">
-        <div class="card-hanzi blur-text" id="card-hz-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('card-hz-${item.id}')">${item.hanzi}</div>
-        <button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-hz-${item.id}')" title="Mostrar/Ocultar Hanzi">👁️</button>
+        <div class="card-hanzi ${blurClass}" id="card-hz-${item.id}">${item.hanzi}</div>
+        ${isTodayTab ? `<button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-hz-${item.id}')" title="Mostrar/Ocultar Hanzi">👁️</button>` : ''}
       </div>
 
       <div class="card-blur-row">
-        <div class="card-pinyin blur-text" id="card-py-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('card-py-${item.id}')">${item.pinyin}</div>
-        <button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-py-${item.id}')" title="Mostrar/Ocultar Pinyin">👁️</button>
+        <div class="card-pinyin ${blurClass}" id="card-py-${item.id}">${item.pinyin}</div>
+        ${isTodayTab ? `<button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-py-${item.id}')" title="Mostrar/Ocultar Pinyin">👁️</button>` : ''}
       </div>
 
       <div class="card-blur-row">
-        <div class="card-traducao blur-text" id="card-tr-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('card-tr-${item.id}')">${item.traducao}</div>
-        <button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-tr-${item.id}')" title="Mostrar/Ocultar Tradução">👁️</button>
+        <div class="card-traducao ${blurClass}" id="card-tr-${item.id}">${item.traducao}</div>
+        ${isTodayTab ? `<button class="btn-eye" onclick="event.stopPropagation(); toggleElementBlur('card-tr-${item.id}')" title="Mostrar/Ocultar Tradução">👁️</button>` : ''}
       </div>
 
       <div class="card-footer">
@@ -542,9 +561,12 @@ function renderCardsView() {
   });
 }
 
-// View: Tabela
+// View: Tabela (Blur APENAS na aba 'today')
 function renderTableView() {
   tableBody.innerHTML = '';
+  const isTodayTab = (currentMainTab === 'today');
+  const blurClass = isTodayTab ? 'blur-text' : '';
+
   filteredPhrases.forEach(item => {
     const tr = document.createElement('tr');
     tr.onclick = () => openModalDetails(item);
@@ -553,9 +575,9 @@ function renderTableView() {
 
     tr.innerHTML = `
       <td><b>#${item.id}</b></td>
-      <td class="td-hanzi blur-text" id="tbl-hz-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('tbl-hz-${item.id}')">${item.hanzi}</td>
-      <td class="td-pinyin blur-text" id="tbl-py-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('tbl-py-${item.id}')">${item.pinyin}</td>
-      <td class="blur-text" id="tbl-tr-${item.id}" onclick="event.stopPropagation(); toggleElementBlur('tbl-tr-${item.id}')">${item.traducao}</td>
+      <td class="td-hanzi ${blurClass}" id="tbl-hz-${item.id}">${item.hanzi}</td>
+      <td class="td-pinyin ${blurClass}" id="tbl-py-${item.id}">${item.pinyin}</td>
+      <td class="${blurClass}" id="tbl-tr-${item.id}">${item.traducao}</td>
       <td><span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">${item.srs.nivel} / 17</span></td>
       <td>${item.srs.proximaRevisao || 'Pendente'}</td>
       <td>
@@ -757,7 +779,7 @@ function exportJSON() {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(phrasesData, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", "Frases_Chinês_SRS.json");
+  downloadAnchor.setAttribute("download", "Dashboard_Chinês_SRS.json");
   document.body.appendChild(downloadAnchor);
   downloadAnchor.click();
   downloadAnchor.remove();

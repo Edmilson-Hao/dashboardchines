@@ -3,8 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Estudo de Chinês SRS</title>
+  <title>Dashboard Chinês SRS</title>
   
+  <!-- PWA Manifest e Tema -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0284c7">
+  <link rel="apple-touch-icon" href="icon.svg">
+
   <!-- Google Fonts e FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +20,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
 
@@ -23,8 +28,11 @@
   <header class="header">
     <div class="header-container">
       <div class="logo">
-        <i class="fa-solid fa-language"></i>
-        <h1>Estudo de Chinês <span>SRS</span></h1>
+        <div class="logo-icon-box">
+          <span class="logo-a">A</span>
+          <span class="logo-zi">字</span>
+        </div>
+        <h1>Dashboard Chinês <span>SRS</span></h1>
       </div>
       <div class="header-actions">
         <button id="btn-toggle-theme" class="btn btn-icon-only" title="Alternar Tema">
@@ -94,6 +102,14 @@
           <div class="m-stat-row"><span>Revisões Futuras:</span> <strong id="m-stat-future">0</strong></div>
           <div class="m-stat-row"><span>Frases no SRS (Iniciadas):</span> <strong id="m-stat-studied">0</strong></div>
         </div>
+      </div>
+
+      <div class="manage-card border-danger-card">
+        <h3><i class="fa-solid fa-triangle-exclamation" style="color: var(--danger-color);"></i> Zona de Perigo / Memória</h3>
+        <p>Limpa todos os dados salvos e restaura o aplicativo com as frases padrão iniciais.</p>
+        <button id="btn-reset-system" class="btn btn-danger btn-full">
+          <i class="fa-solid fa-rotate-right"></i> Resetar Memória do Sistema
+        </button>
       </div>
     </section>
 
@@ -183,7 +199,7 @@
 
   </main>
 
-  <!-- Modal Detalhes com Efeito Blur e Olhinhos -->
+  <!-- Modal Detalhes -->
   <div class="modal-overlay" id="modal-details">
     <div class="modal-card">
       <button class="modal-close" id="modal-close-btn"><i class="fa-solid fa-xmark"></i></button>
@@ -303,6 +319,17 @@
     </div>
   </div>
 
-  <script src="script.js?v=6"></script>
+  <!-- Script de Registro do Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker registrado com sucesso:', reg.scope))
+          .catch(err => console.error('Erro ao registrar Service Worker:', err));
+      });
+    }
+  </script>
+
+  <script src="script.js?v=11"></script>
 </body>
 </html>

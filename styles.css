@@ -79,11 +79,33 @@ body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--primary-color);
+  gap: 0.6rem;
 }
 
-.logo i { font-size: 1.3rem; }
+.logo-icon-box {
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #ffffff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
+}
+
+.logo-a {
+  font-size: 0.85rem;
+  font-family: var(--font-primary);
+  letter-spacing: -0.5px;
+}
+
+.logo-zi {
+  font-size: 0.95rem;
+  font-family: var(--font-chinese);
+  line-height: 1;
+}
+
 .logo h1 { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
 .logo h1 span {
   font-size: 0.7rem;
@@ -214,6 +236,10 @@ body {
   flex-direction: column;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.border-danger-card {
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .manage-card h3 {
@@ -431,7 +457,6 @@ body {
 .blur-text {
   filter: blur(8px);
   user-select: none;
-  cursor: pointer;
   transition: filter 0.3s ease;
 }
 
@@ -440,7 +465,6 @@ body {
   user-select: text;
 }
 
-/* Blur nos cards da lista principal */
 .card-blur-row {
   display: flex;
   align-items: center;
