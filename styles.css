@@ -369,6 +369,40 @@ body {
 .tag-lvl { padding: 0.15rem 0.4rem; border-radius: 4px; background: var(--bg-color); color: var(--text-muted); font-size: 0.75rem; }
 .tag-lvl.active { background: var(--primary-light); color: var(--primary-color); font-weight: 600; }
 
+.tag-dificil {
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: #fff7ed;
+  color: #ea580c;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+body.dark-mode .tag-dificil {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+.btn-icon.active-dificil {
+  color: #ea580c !important;
+  background: #fff7ed;
+}
+body.dark-mode .btn-icon.active-dificil {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c !important;
+}
+
+.btn-warning {
+  background-color: #f97316;
+  color: white;
+  border-color: #f97316;
+}
+.btn-warning:hover {
+  background-color: #ea580c;
+}
+
 .card-actions-row { display: flex; gap: 0.3rem; align-items: center; }
 
 /* Tabela */

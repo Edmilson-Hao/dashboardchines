@@ -143,6 +143,9 @@ function loadFromLocalStorage() {
         totalEstudos: 0
       };
     }
+    if (typeof p.dificil === 'undefined') {
+      p.dificil = false;
+    }
   });
 }
 
@@ -186,6 +189,23 @@ function setupEventListeners() {
       renderCurrentView();
     });
   });
+
+  // Quiz de Dificuldade
+  const btnStartQuiz = document.getElementById('btn-start-quiz');
+  if (btnStartQuiz) {
+    btnStartQuiz.addEventListener('click', () => {
+      if (filteredPhrases.length === 0) {
+        alert('Nenhuma palavra em dificuldade para treinar.');
+        return;
+      }
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      const fcBtn = document.querySelector('.view-btn[data-view="flashcards"]');
+      if (fcBtn) fcBtn.classList.add('active');
+      currentView = 'flashcards';
+      currentFlashcardIndex = 0;
+      renderCurrentView();
+    });
+  }
 
   fileInput.addEventListener('change', handleFileUpload);
   btnExportJson.addEventListener('click', exportJSON);
@@ -254,6 +274,13 @@ function setupEventListeners() {
     }
   });
 
+  document.getElementById('m-btn-dificil').addEventListener('click', () => {
+    if (currentModalPhrase) {
+      toggleDificil(currentModalPhrase.id);
+      openModalDetails(phrasesData.find(p => p.id === currentModalPhrase.id));
+    }
+  });
+
   document.getElementById('m-audio-btn').addEventListener('click', () => {
     if (currentModalPhrase) speakChinese(currentModalPhrase.hanzi);
   });
@@ -303,6 +330,12 @@ function resetSystemMemory() {
   if (confirm("⚠️ ATENÇÃO: Deseja realmente resetar a memória do sistema? Todos os seus dados atuais e progresso de estudo serão apagados e as frases padrão serão restauradas.")) {
     localStorage.removeItem('chinese_srs_phrases');
     phrasesData = JSON.parse(JSON.stringify(defaultPhrases));
+    phrasesData.forEach(p => {
+      if (!p.srs) {
+        p.srs = { nivel: 0, dataEstudo: null, proximaRevisao: null, totalEstudos: 0 };
+      }
+      p.dificil = false;
+    });
     saveToLocalStorage();
     updateDashboardAndCounts();
     applyFiltersAndRender();
@@ -367,6 +400,22 @@ function unmarkStudied(phraseId) {
   }
 }
 
+// Alternar Dificuldade
+function toggleDificil(phraseId) {
+  const item = phrasesData.find(p => p.id === phraseId);
+  if (!item) return;
+
+  item.dificil = !item.dificil;
+
+  saveToLocalStorage();
+  updateDashboardAndCounts();
+  applyFiltersAndRender();
+
+  if (peerConn && peerConn.open) {
+    peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+  }
+}
+
 // Excluir Frase
 function deletePhrase(phraseId) {
   if (confirm(`Tem certeza que deseja excluir permanentemente a frase #${phraseId}?`)) {
@@ -408,17 +457,22 @@ function updateDashboardAndCounts() {
   const todayList = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao <= todayStr);
   const futureList = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao > todayStr);
   const studiedList = phrasesData.filter(p => p.srs.dataEstudo !== null);
+  const dificilList = phrasesData.filter(p => p.dificil === true);
 
   document.getElementById('count-all').textContent = newPhrases.length;
   document.getElementById('count-today').textContent = todayList.length;
   document.getElementById('count-future').textContent = futureList.length;
   document.getElementById('count-studied').textContent = studiedList.length;
+  const countDificil = document.getElementById('count-dificil');
+  if (countDificil) countDificil.textContent = dificilList.length;
 
   document.getElementById('m-stat-total').textContent = total;
   document.getElementById('m-stat-new').textContent = newPhrases.length;
   document.getElementById('m-stat-due').textContent = todayList.length;
   document.getElementById('m-stat-future').textContent = futureList.length;
   document.getElementById('m-stat-studied').textContent = studiedList.length;
+  const mStatDificil = document.getElementById('m-stat-dificil');
+  if (mStatDificil) mStatDificil.textContent = dificilList.length;
 }
 
 // Filtros e Renderização por Aba
@@ -440,6 +494,15 @@ function applyFiltersAndRender() {
   manageTabView.classList.add('hidden');
   mainToolbar.classList.remove('hidden');
 
+  const btnQuiz = document.getElementById('btn-start-quiz');
+  if (btnQuiz) {
+    if (currentMainTab === 'dificuldade') {
+      btnQuiz.classList.remove('hidden');
+    } else {
+      btnQuiz.classList.add('hidden');
+    }
+  }
+
   let tabPhrases = [];
   if (currentMainTab === 'all') {
     tabPhrases = phrasesData.filter(p => !p.srs.dataEstudo);
@@ -449,6 +512,8 @@ function applyFiltersAndRender() {
     tabPhrases = phrasesData.filter(p => p.srs.dataEstudo !== null && p.srs.proximaRevisao > todayStr);
   } else if (currentMainTab === 'studied') {
     tabPhrases = phrasesData.filter(p => p.srs.dataEstudo !== null);
+  } else if (currentMainTab === 'dificuldade') {
+    tabPhrases = phrasesData.filter(p => p.dificil === true);
   }
 
   filteredPhrases = tabPhrases.filter(item => {
@@ -512,10 +577,15 @@ function renderCardsView() {
 
     const blurClass = isTodayTab ? 'blur-text' : '';
 
+    const isDificil = item.dificil === true;
+
     card.innerHTML = `
       <div class="card-header">
         <span class="card-id">#${item.id}</span>
         <div>
+          <button class="btn-icon ${isDificil ? 'active-dificil' : ''}" title="${isDificil ? 'Remover de Dificuldade' : 'Marcar como Dificuldade'}" onclick="event.stopPropagation(); toggleDificil(${item.id})">
+            <i class="fa-solid fa-fire"></i>
+          </button>
           <button class="btn-icon" title="Ouvir" onclick="event.stopPropagation(); speakChinese('${escapeQuotes(item.hanzi)}')">
             <i class="fa-solid fa-volume-high"></i>
           </button>
@@ -544,7 +614,10 @@ function renderCardsView() {
       </div>
 
       <div class="card-footer">
-        <span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">Nível: ${item.srs.nivel}/17</span>
+        <div style="display:flex; gap:0.3rem; align-items:center;">
+          <span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">Nível: ${item.srs.nivel}/17</span>
+          ${isDificil ? '<span class="tag-dificil"><i class="fa-solid fa-fire"></i> Difícil</span>' : ''}
+        </div>
         <div class="card-actions-row">
           ${isStudied ? `
             <button class="btn btn-secondary" style="padding: 0.2rem 0.4rem; font-size:0.75rem;" title="Remover de estudadas / Desfazer" onclick="event.stopPropagation(); unmarkStudied(${item.id})">
@@ -573,14 +646,18 @@ function renderTableView() {
 
     const isStudied = item.srs.dataEstudo !== null;
 
+    const isDificil = item.dificil === true;
     tr.innerHTML = `
       <td><b>#${item.id}</b></td>
       <td class="td-hanzi ${blurClass}" id="tbl-hz-${item.id}">${item.hanzi}</td>
       <td class="td-pinyin ${blurClass}" id="tbl-py-${item.id}">${item.pinyin}</td>
       <td class="${blurClass}" id="tbl-tr-${item.id}">${item.traducao}</td>
-      <td><span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">${item.srs.nivel} / 17</span></td>
+      <td><span class="tag-lvl ${item.srs.nivel > 0 ? 'active' : ''}">${item.srs.nivel} / 17</span> ${isDificil ? '<i class="fa-solid fa-fire" style="color:#f97316;"></i>' : ''}</td>
       <td>${item.srs.proximaRevisao || 'Pendente'}</td>
       <td>
+        <button class="btn-icon ${isDificil ? 'active-dificil' : ''}" title="${isDificil ? 'Remover de Dificuldade' : 'Marcar como Dificuldade'}" onclick="event.stopPropagation(); toggleDificil(${item.id})">
+          <i class="fa-solid fa-fire"></i>
+        </button>
         <button class="btn-icon" title="Ouvir" onclick="event.stopPropagation(); speakChinese('${escapeQuotes(item.hanzi)}')">
           <i class="fa-solid fa-volume-high"></i>
         </button>
@@ -663,6 +740,19 @@ function openModalDetails(item) {
     btnUnmark.classList.add('hidden');
   }
 
+  const btnDificil = document.getElementById('m-btn-dificil');
+  if (btnDificil) {
+    if (item.dificil) {
+      btnDificil.innerHTML = '<i class="fa-solid fa-fire"></i> Remover de Dificuldade';
+      btnDificil.classList.add('btn-warning');
+      btnDificil.classList.remove('btn-outline');
+    } else {
+      btnDificil.innerHTML = '<i class="fa-solid fa-fire"></i> Marcar como Dificuldade';
+      btnDificil.classList.remove('btn-warning');
+      btnDificil.classList.add('btn-outline');
+    }
+  }
+
   modalDetails.classList.add('active');
 }
 
@@ -722,6 +812,7 @@ function handleSavePhrase(event) {
       hanzi: hanzi,
       pinyin: pinyin,
       traducao: traducao,
+      dificil: false,
       srs: {
         nivel: 0,
         dataEstudo: null,
