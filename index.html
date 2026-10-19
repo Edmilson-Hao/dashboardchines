@@ -16,7 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-  <link rel="stylesheet" href="styles.css?v=23" />
+  <link rel="stylesheet" href="styles.css?v=24" />
 </head>
 <body>
 
@@ -157,6 +157,28 @@
         <button class="btn btn-primary btn-full" id="btn-p2p">
           <i class="fa-solid fa-qrcode"></i> Abrir conexão P2P
         </button>
+      </div>
+
+      <div class="manage-section">
+        <h3><i class="fa-solid fa-brain"></i> Correção semântica offline</h3>
+        <p>
+          Opcional: baixa um modelo de linguagem leve (~100&nbsp;MB) uma vez.
+          Depois corrige por significado (paráfrase, ordem das palavras), ainda offline.
+          Se desativado, usa o algoritmo local de sempre.
+        </p>
+        <div id="semantic-status" class="semantic-status">Status: algoritmo local (regras)</div>
+        <div class="semantic-progress hidden" id="semantic-progress-wrap">
+          <div class="semantic-progress-bar" id="semantic-progress-bar" style="width:0%"></div>
+          <span id="semantic-progress-text">0%</span>
+        </div>
+        <div class="btn-group" style="margin-top:0.75rem;">
+          <button class="btn btn-primary" id="btn-semantic-enable">
+            <i class="fa-solid fa-download"></i> Ativar e baixar
+          </button>
+          <button class="btn btn-outline hidden" id="btn-semantic-disable">
+            <i class="fa-solid fa-ban"></i> Desativar
+          </button>
+        </div>
       </div>
 
       <div class="manage-section danger-zone">
@@ -319,6 +341,6 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="script.js?v=23"></script>
+  <script src="script.js?v=24"></script>
 </body>
 </html>

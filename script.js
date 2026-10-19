@@ -64,10 +64,18 @@ let studyQueue = [];
 let studyIndex = 0;
 let currentExercise = null; // { phrase, type, options? }
 let answered = false;
-let sessionLog = []; // { id, type, prompt, expected, userAnswer, systemCorrect, exactMatch, revealed }
+let sessionLog = []; // { id, type, prompt, expected, userAnswer, systemCorrect, exactMatch, revealed, method, similarity }
 let peer = null;
 let peerConn = null;
 let currentDetailId = null;
+
+/* Semantic offline model (optional ~100MB) */
+const SEMANTIC_MODEL_ID = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+const SEMANTIC_THRESHOLD = 0.78;
+let semanticEnabled = localStorage.getItem('chinese_srs_semantic') === '1';
+let semanticReady = false;
+let semanticLoading = false;
+let semanticExtractor = null;
 
 /* ---------- Utils ---------- */
 function todayStr() {
@@ -164,6 +172,229 @@ function isPortugueseMatch(user, expected) {
   if (u === e) return true;
   if (similarityRatio(u, e) >= 0.88) return true;
   return false;
+}
+
+/* ---------- Semantic model (optional) ---------- */
+function updateSemanticUI() {
+  const status = document.getElementById('semantic-status');
+  const btnEn = document.getElementById('btn-semantic-enable');
+  const btnDis = document.getElementById('btn-semantic-disable');
+  const prog = document.getElementById('semantic-progress-wrap');
+  if (!status) return;
+
+  if (semanticLoading) {
+    status.textContent = 'Status: baixando / carregando modelo…';
+    status.classList.remove('active');
+    btnEn?.classList.add('hidden');
+    btnDis?.classList.add('hidden');
+    prog?.classList.remove('hidden');
+    return;
+  }
+
+  prog?.classList.add('hidden');
+
+  if (semanticEnabled && semanticReady) {
+    status.textContent = 'Status: correção semântica ativa (offline)';
+    status.classList.add('active');
+    btnEn?.classList.add('hidden');
+    btnDis?.classList.remove('hidden');
+  } else if (semanticEnabled && !semanticReady) {
+    status.textContent = 'Status: ativado, mas modelo não carregou — usando regras';
+    status.classList.remove('active');
+    btnEn?.classList.remove('hidden');
+    btnDis?.classList.remove('hidden');
+  } else {
+    status.textContent = 'Status: algoritmo local (regras)';
+    status.classList.remove('active');
+    btnEn?.classList.remove('hidden');
+    btnDis?.classList.add('hidden');
+  }
+}
+
+function cosineSim(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+async function embedText(text) {
+  if (!semanticExtractor) return null;
+  const out = await semanticExtractor(text, { pooling: 'mean', normalize: true });
+  // transformers.js returns Tensor with .data
+  if (out && out.data) return Array.from(out.data);
+  if (Array.isArray(out)) return out;
+  return null;
+}
+
+async function semanticSimilarity(a, b) {
+  try {
+    const [ea, eb] = await Promise.all([embedText(a), embedText(b)]);
+    if (!ea || !eb) return null;
+    return cosineSim(ea, eb);
+  } catch (err) {
+    console.warn('Semantic similarity failed:', err);
+    return null;
+  }
+}
+
+async function loadSemanticModel() {
+  if (semanticReady && semanticExtractor) return true;
+  if (semanticLoading) return false;
+  semanticLoading = true;
+  updateSemanticUI();
+
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1');
+    const { pipeline, env } = mod;
+    env.allowLocalModels = false;
+    env.useBrowserCache = true;
+
+    semanticExtractor = await pipeline(
+      'feature-extraction',
+      SEMANTIC_MODEL_ID,
+      {
+        progress_callback: (p) => {
+          if (!p) return;
+          const wrap = document.getElementById('semantic-progress-wrap');
+          const bar = document.getElementById('semantic-progress-bar');
+          const txt = document.getElementById('semantic-progress-text');
+          wrap?.classList.remove('hidden');
+          let pct = 0;
+          if (typeof p.progress === 'number') pct = Math.round(p.progress);
+          else if (p.loaded && p.total) pct = Math.round((p.loaded / p.total) * 100);
+          if (bar) bar.style.width = pct + '%';
+          if (txt) txt.textContent = (p.status ? p.status + ' ' : '') + pct + '%';
+        }
+      }
+    );
+
+    // warm-up
+    await embedText('测试 test');
+    semanticReady = true;
+    semanticEnabled = true;
+    localStorage.setItem('chinese_srs_semantic', '1');
+    semanticLoading = false;
+    updateSemanticUI();
+    return true;
+  } catch (err) {
+    console.error('Failed to load semantic model:', err);
+    semanticReady = false;
+    semanticExtractor = null;
+    semanticLoading = false;
+    updateSemanticUI();
+    Swal.fire({
+      icon: 'error',
+      title: 'Falha ao carregar modelo',
+      text: 'Não foi possível baixar ou iniciar o modelo. A correção por regras continua ativa.',
+      background: '#1e293b',
+      color: '#f1f5f9',
+      confirmButtonColor: '#f59e0b'
+    });
+    return false;
+  }
+}
+
+function disableSemanticModel() {
+  semanticEnabled = false;
+  semanticReady = false;
+  semanticExtractor = null;
+  localStorage.setItem('chinese_srs_semantic', '0');
+  updateSemanticUI();
+  Swal.fire({
+    toast: true,
+    position: 'top',
+    icon: 'info',
+    title: 'Correção semântica desativada',
+    showConfirmButton: false,
+    timer: 1800,
+    background: '#1e293b',
+    color: '#f1f5f9'
+  });
+}
+
+async function enableSemanticModel() {
+  const res = await Swal.fire({
+    title: 'Ativar correção semântica?',
+    html: `
+      <p style="text-align:left;font-size:0.9rem;color:#94a3b8;line-height:1.5;">
+        Será baixado o modelo <strong style="color:#f1f5f9;">paraphrase-multilingual-MiniLM</strong>
+        (~100&nbsp;MB) uma vez. Depois funciona <strong style="color:#f1f5f9;">offline</strong> e melhora
+        a detecção de paráfrases e ordem das palavras.
+      </p>
+      <p style="text-align:left;font-size:0.85rem;color:#94a3b8;margin-top:0.5rem;">
+        Se cancelar ou falhar o download, a correção por regras locais continua normalmente.
+        O relatório da sessão é gerado nos dois modos.
+      </p>
+    `,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Baixar e ativar',
+    cancelButtonText: 'Agora não',
+    background: '#1e293b',
+    color: '#f1f5f9',
+    confirmButtonColor: '#f59e0b',
+    cancelButtonColor: '#475569'
+  });
+  if (!res.isConfirmed) return;
+  const ok = await loadSemanticModel();
+  if (ok) {
+    Swal.fire({
+      icon: 'success',
+      title: 'Modelo pronto',
+      text: 'Correção semântica ativa nesta e nas próximas sessões.',
+      background: '#1e293b',
+      color: '#f1f5f9',
+      confirmButtonColor: '#f59e0b'
+    });
+  }
+}
+
+/**
+ * Hybrid check: semantic if ready, else rules.
+ * Returns { correct, exactMatch, method, similarity }
+ */
+async function evaluateAnswer(type, userAns, phrase) {
+  let exactMatch = false;
+  let rulesCorrect = false;
+
+  if (type === 'pt2hanzi') {
+    exactMatch = normalizeHanzi(userAns) === normalizeHanzi(phrase.hanzi);
+    rulesCorrect = isHanziMatch(userAns, phrase.hanzi);
+  } else if (type === 'hanzi2pt') {
+    exactMatch = normalize(userAns) === normalize(phrase.traducao);
+    rulesCorrect = isPortugueseMatch(userAns, phrase.traducao);
+  } else {
+    exactMatch = normalize(userAns) === normalize(phrase.traducao);
+    rulesCorrect = exactMatch;
+  }
+
+  // Try semantic for typing modes
+  if (semanticEnabled && semanticReady && (type === 'pt2hanzi' || type === 'hanzi2pt')) {
+    const expected = type === 'pt2hanzi' ? phrase.hanzi : phrase.traducao;
+    const sim = await semanticSimilarity(userAns, expected);
+    if (sim !== null) {
+      const correct = sim >= SEMANTIC_THRESHOLD || rulesCorrect;
+      return {
+        correct,
+        exactMatch,
+        method: 'semantic',
+        similarity: Math.round(sim * 1000) / 1000
+      };
+    }
+  }
+
+  return {
+    correct: rulesCorrect,
+    exactMatch,
+    method: 'rules',
+    similarity: null
+  };
 }
 
 function save() {
@@ -483,10 +714,9 @@ function showCurrentExercise() {
   }
 }
 
-function checkAnswer() {
+async function checkAnswer() {
   if (answered || !currentExercise) return;
   const { phrase, type } = currentExercise;
-  let correct = false;
   let userAns = '';
 
   if (type === 'mc') {
@@ -505,7 +735,22 @@ function checkAnswer() {
       return;
     }
     userAns = selected.textContent;
-    correct = normalize(userAns) === normalize(phrase.traducao);
+  } else {
+    userAns = document.getElementById('study-answer').value;
+    document.getElementById('study-answer').disabled = true;
+  }
+
+  // Prevent double-tap while evaluating
+  answered = true;
+  const btnCheck = document.getElementById('btn-check');
+  const prevLabel = btnCheck.innerHTML;
+  btnCheck.disabled = true;
+  if (type !== 'mc') btnCheck.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verificando…';
+
+  let result;
+  if (type === 'mc') {
+    const correct = normalize(userAns) === normalize(phrase.traducao);
+    result = { correct, exactMatch: correct, method: 'rules', similarity: null };
     document.querySelectorAll('.mc-option').forEach(btn => {
       btn.disabled = true;
       if (normalize(btn.textContent) === normalize(phrase.traducao)) {
@@ -515,43 +760,36 @@ function checkAnswer() {
       }
     });
   } else {
-    userAns = document.getElementById('study-answer').value;
-    if (type === 'pt2hanzi') {
-      correct = isHanziMatch(userAns, phrase.hanzi);
-    } else {
-      correct = isPortugueseMatch(userAns, phrase.traducao);
-    }
-    document.getElementById('study-answer').disabled = true;
+    result = await evaluateAnswer(type, userAns, phrase);
   }
 
-  answered = true;
+  btnCheck.disabled = false;
+  btnCheck.innerHTML = prevLabel;
+
+  const { correct, exactMatch, method, similarity } = result;
   const feedback = document.getElementById('feedback');
   feedback.classList.add('show', correct ? 'ok' : 'fail');
 
-  let exactMatch = false;
   let promptText = '';
   let expectedText = '';
-
   if (type === 'pt2hanzi') {
     promptText = phrase.traducao;
     expectedText = phrase.hanzi;
-    exactMatch = normalizeHanzi(userAns) === normalizeHanzi(phrase.hanzi);
-  } else if (type === 'hanzi2pt') {
-    promptText = phrase.hanzi;
-    expectedText = phrase.traducao;
-    exactMatch = normalize(userAns) === normalize(phrase.traducao);
   } else {
     promptText = phrase.hanzi;
     expectedText = phrase.traducao;
-    exactMatch = correct;
   }
 
   if (correct) {
     let softNote = '';
-    if ((type === 'pt2hanzi' || type === 'hanzi2pt') && !exactMatch) {
-      softNote = type === 'pt2hanzi'
-        ? '<div style="font-size:0.8rem;opacity:0.85;margin-top:0.25rem;">Ordem diferente do gabarito, mas aceito.</div>'
-        : '<div style="font-size:0.8rem;opacity:0.85;margin-top:0.25rem;">Quase idêntico ao gabarito — aceito.</div>';
+    if (!exactMatch) {
+      if (method === 'semantic' && similarity != null) {
+        softNote = `<div style="font-size:0.8rem;opacity:0.85;margin-top:0.25rem;">Aceito por similaridade semântica (${Math.round(similarity * 100)}%).</div>`;
+      } else if (type === 'pt2hanzi') {
+        softNote = '<div style="font-size:0.8rem;opacity:0.85;margin-top:0.25rem;">Ordem diferente do gabarito, mas aceito.</div>';
+      } else if (type === 'hanzi2pt') {
+        softNote = '<div style="font-size:0.8rem;opacity:0.85;margin-top:0.25rem;">Quase idêntico ao gabarito — aceito.</div>';
+      }
     }
     feedback.innerHTML = `<strong>Correto!</strong>${softNote}`;
     markCorrect(phrase.id);
@@ -569,6 +807,8 @@ function checkAnswer() {
     systemCorrect: correct,
     exactMatch,
     revealed: false,
+    method: method || 'rules',
+    similarity,
     hanzi: phrase.hanzi,
     pinyin: phrase.pinyin,
     traducao: phrase.traducao
@@ -605,6 +845,8 @@ function revealAnswer() {
     systemCorrect: false,
     exactMatch: false,
     revealed: true,
+    method: semanticEnabled && semanticReady ? 'semantic-available' : 'rules',
+    similarity: null,
     hanzi: phrase.hanzi,
     pinyin: phrase.pinyin,
     traducao: phrase.traducao
@@ -644,18 +886,26 @@ function buildSessionReport() {
   const soft = sessionLog.filter(x => x.systemCorrect && !x.exactMatch).length;
   const fail = sessionLog.filter(x => !x.systemCorrect).length;
   const revealed = sessionLog.filter(x => x.revealed).length;
+  const semanticCount = sessionLog.filter(x => x.method === 'semantic').length;
   const date = new Date().toLocaleString('pt-BR');
+  const modeDesc = semanticEnabled && semanticReady
+    ? 'Correção SEMÂNTICA offline ativa (embedding multilingual ~100MB) + fallback de regras'
+    : 'Correção por REGRAS locais (exato / anagrama de caracteres / Levenshtein)';
 
   let items = '';
   sessionLog.forEach((entry, i) => {
     const status = entry.revealed
       ? 'REVELOU (contado como erro)'
       : entry.systemCorrect
-        ? (entry.exactMatch ? 'ACERTO EXATO (sistema)' : 'ACERTO FLEXÍVEL (sistema — ordem/similaridade)')
+        ? (entry.exactMatch ? 'ACERTO EXATO (sistema)' : 'ACERTO FLEXÍVEL (sistema)')
         : 'ERRO (sistema)';
+    const methodLine = entry.method === 'semantic'
+      ? `- Método: semântico (similaridade ${entry.similarity != null ? entry.similarity : 'n/d'})`
+      : `- Método: regras locais`;
     items += `
 ### Item ${i + 1} — #${entry.id} — ${typeLabel(entry.type)}
 - Status do app: ${status}
+${methodLine}
 - Enunciado mostrado: ${entry.prompt}
 - Gabarito do app: ${entry.expected}
 - Resposta do usuário: ${entry.userAnswer}
@@ -667,22 +917,25 @@ function buildSessionReport() {
 
   const prompt = `Você é um professor de chinês mandarim (nível iniciante/intermediário) avaliando um relatório de treino de digitação de FRASES (não palavras isoladas).
 
-Contexto:
-- O app usa comparação flexível: aceita a mesma sequência de caracteres em ordem diferente e similaridade alta (erros leves de digitação).
-- Isso pode gerar falsos positivos (ordem que muda o sentido) ou falsos negativos (sinônimos / paráfrases corretas).
+Contexto do app:
+- Modo de correção desta sessão: ${modeDesc}
+- Regras locais: aceitam mesma sequência de caracteres em ordem diferente e similaridade alta de digitação.
+- Modo semântico (se ativo): usa embeddings multilingues (paraphrase-multilingual-MiniLM); limiar ~0,78 de similaridade de cosseno.
+- Pode haver falsos positivos (ordem que muda o sentido) ou falsos negativos (sinônimos corretos abaixo do limiar).
 
 Sua tarefa:
 1. Para cada item, diga se a resposta do usuário está semanticamente CORRETA, PARCIALMENTE CORRETA ou INCORRETA em relação ao enunciado e ao sentido da frase.
-2. Se o app marcou "ACERTO FLEXÍVEL", confirme se realmente merece acerto ou se a ordem/alteração mudou o sentido.
+2. Se o app marcou acerto flexível ou semântico, confirme se realmente merece acerto.
 3. Se o app marcou ERRO mas a resposta estiver correta (sinônimo, ordem natural, variação aceitável), diga que deveria contar como acerto.
-4. No final, dê um resumo: quantos acertos reais, quantos erros reais, e 2–3 dicas de estudo focadas nos erros.
+4. No final, resumo: acertos reais, erros reais, e 2–3 dicas de estudo.
 
 Responda em português, de forma objetiva, item por item.
 
 --- RELATÓRIO DA SESSÃO ---
 Data: ${date}
+Modo de correção: ${modeDesc}
 Total respondido: ${total}
-Marcados corretos pelo app: ${ok} (dos quais ${soft} foram acertos flexíveis)
+Marcados corretos pelo app: ${ok} (flexíveis/não-exatos: ${soft}; avaliados por semântica: ${semanticCount})
 Marcados errados pelo app: ${fail} (inclui ${revealed} revelação de resposta)
 ${items}
 --- FIM DO RELATÓRIO ---`;
@@ -1238,6 +1491,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('file-input').addEventListener('change', handleImport);
   document.getElementById('btn-reset').addEventListener('click', resetSystem);
   document.getElementById('btn-p2p').addEventListener('click', openP2P);
+  document.getElementById('btn-semantic-enable')?.addEventListener('click', enableSemanticModel);
+  document.getElementById('btn-semantic-disable')?.addEventListener('click', disableSemanticModel);
+  updateSemanticUI();
+  // Se já estava ativado antes, tenta recarregar do cache do browser (offline após 1º download)
+  if (semanticEnabled) {
+    loadSemanticModel().catch(() => {});
+  }
   document.getElementById('p2p-close').addEventListener('click', closeP2P);
   document.getElementById('modal-p2p').addEventListener('click', e => {
     if (e.target.id === 'modal-p2p') closeP2P();

@@ -802,6 +802,68 @@ body {
   color: var(--danger);
 }
 
+.semantic-status {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.semantic-status.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.semantic-progress {
+  margin-top: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.semantic-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.2s;
+  max-width: 100%;
+}
+
+.semantic-progress {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.semantic-progress > .semantic-progress-bar {
+  height: 6px;
+  background: var(--elevated);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  flex: 1;
+}
+
+/* fill is set via width on the same element using inline style as progress */
+#semantic-progress-bar {
+  background: linear-gradient(90deg, var(--accent), var(--accent-pressed));
+  height: 6px;
+  border-radius: 4px;
+}
+
+#semantic-progress-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 2.5rem;
+}
+
 /* ========== MODAL ========== */
 .modal-overlay {
   position: fixed;
