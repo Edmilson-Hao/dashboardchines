@@ -1,10 +1,11 @@
 {
-  "name": "Dashboard Chinês SRS",
+  "name": "Chinês SRS — Digitação",
   "short_name": "Chinês SRS",
+  "description": "Treino de frases em chinês por digitação com SRS",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
-  "theme_color": "#0284c7",
+  "theme_color": "#f59e0b",
   "orientation": "any",
   "icons": [
     {
