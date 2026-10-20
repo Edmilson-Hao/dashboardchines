@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Chinês SRS — Digitação</title>
-  <link rel="manifest" href="manifest.json?v=29">
+  <link rel="manifest" href="manifest.json?v=30">
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -20,7 +20,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-  <link rel="stylesheet" href="styles.css?v=29" />
+  <link rel="stylesheet" href="styles.css?v=30" />
 </head>
 <body>
 
@@ -212,7 +212,15 @@
         </div>
         <div class="form-group" style="margin-bottom:0.5rem;">
           <label for="cfg-chat-model">Modelo</label>
-          <input type="text" id="cfg-chat-model" placeholder="gemini-2.5-flash" />
+          <select id="cfg-chat-model" style="width:100%;padding:0.6rem 0.75rem;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);">
+            <option value="gemini-3.8-flash">gemini-3.8-flash (recomendado · free)</option>
+            <option value="gemini-3.6-flash">gemini-3.6-flash (free)</option>
+            <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (mais cotas free)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (legado)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash (legado)</option>
+          </select>
+          <p style="font-size:0.72rem;color:var(--muted);margin-top:0.35rem;">Se OpenAI-compatible, digite o nome do modelo no campo custom abaixo.</p>
+          <input type="text" id="cfg-chat-model-custom" placeholder="Modelo custom (opcional, ex: grok-3)" style="margin-top:0.35rem;width:100%;padding:0.55rem 0.75rem;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);" />
         </div>
         <button class="btn btn-primary btn-full" id="btn-save-chat-cfg">
           <i class="fa-solid fa-floppy-disk"></i> Salvar configuração da IA
@@ -238,28 +246,30 @@
 
     <!-- VIEW: Chat IA -->
     <section class="view" id="view-chat">
-      <p class="section-title">Assistente de estudo</p>
-      <div class="manage-section" style="margin-bottom:0.65rem;">
-        <div id="chat-cfg-status" class="semantic-status" style="margin-bottom:0.55rem;">API: não configurada — vá em Config</div>
-        <div class="chat-storage-wrap">
-          <div class="chat-storage-labels">
-            <span>Espaço do chat (localStorage)</span>
-            <span id="chat-storage-text">0%</span>
+      <div class="chat-screen">
+        <p class="section-title" style="margin-bottom:0.5rem;">Assistente de estudo</p>
+        <div class="manage-section chat-toolbar">
+          <div id="chat-cfg-status" class="semantic-status" style="margin-bottom:0.55rem;">API: não configurada — vá em Config</div>
+          <div class="chat-storage-wrap">
+            <div class="chat-storage-labels">
+              <span>Espaço do chat (localStorage)</span>
+              <span id="chat-storage-text">0%</span>
+            </div>
+            <div class="chat-storage-track">
+              <div class="chat-storage-fill" id="chat-storage-fill" style="width:0%"></div>
+            </div>
+            <p class="chat-storage-hint" id="chat-storage-hint">0 KB usados · ~5 MB disponíveis no navegador</p>
           </div>
-          <div class="chat-storage-track">
-            <div class="chat-storage-fill" id="chat-storage-fill" style="width:0%"></div>
+          <div class="btn-group" style="margin-top:0.55rem;">
+            <button class="btn btn-outline btn-sm" id="btn-chat-report"><i class="fa-solid fa-file-lines"></i> Colar relatório</button>
+            <button class="btn btn-danger btn-sm" id="btn-chat-clear"><i class="fa-solid fa-trash"></i> Apagar tudo</button>
           </div>
-          <p class="chat-storage-hint" id="chat-storage-hint">0 KB usados · ~5 MB disponíveis no navegador</p>
         </div>
-        <div class="btn-group" style="margin-top:0.65rem;">
-          <button class="btn btn-outline btn-sm" id="btn-chat-report"><i class="fa-solid fa-file-lines"></i> Colar relatório</button>
-          <button class="btn btn-danger btn-sm" id="btn-chat-clear"><i class="fa-solid fa-trash"></i> Apagar tudo</button>
+        <div class="chat-log" id="chat-log"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Pergunte sobre chinês, frases, SRS…" />
+          <button class="btn btn-primary" id="btn-chat-send"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
-      </div>
-      <div class="chat-log" id="chat-log"></div>
-      <div class="chat-input-row">
-        <input type="text" id="chat-input" placeholder="Pergunte sobre chinês, frases, SRS…" />
-        <button class="btn btn-primary" id="btn-chat-send"><i class="fa-solid fa-paper-plane"></i></button>
       </div>
     </section>
   </main>
@@ -418,6 +428,6 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="script.js?v=29"></script>
+  <script src="script.js?v=30"></script>
 </body>
 </html>

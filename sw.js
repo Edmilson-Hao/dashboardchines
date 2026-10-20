@@ -1,9 +1,9 @@
-const CACHE_NAME = 'chinese-srs-type-v29';
+const CACHE_NAME = 'chinese-srs-type-v30';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=29',
-  './script.js?v=29',
+  './styles.css?v=30',
+  './script.js?v=30',
   './manifest.json',
   './icon.svg',
   './icon-192.png',

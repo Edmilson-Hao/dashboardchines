@@ -1131,19 +1131,56 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Chat IA */
+/* Chat IA — layout fixo para não estourar a tela */
+#view-chat.active {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 70px - 64px - var(--safe-top) - var(--safe-bottom));
+  max-height: calc(100dvh - 70px - 64px - var(--safe-top) - var(--safe-bottom));
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0.75rem 1rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.chat-toolbar {
+  flex-shrink: 0;
+  margin-bottom: 0.5rem !important;
+  padding: 0.75rem !important;
+}
+
 .chat-log {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  min-height: 220px;
-  max-height: 42vh;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0.85rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-input-row {
+  flex-shrink: 0;
+  margin-bottom: 0.25rem;
 }
 
 .chat-bubble {

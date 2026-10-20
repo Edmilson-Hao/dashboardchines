@@ -1505,10 +1505,34 @@ function connectPeer() {
   setupPeerListeners();
 }
 
+function buildSyncPayload() {
+  const cfg = getChatConfigFromStorage();
+  return {
+    type: 'SYNC_DATA',
+    data: phrasesData,
+    chatConfig: {
+      provider: cfg.provider,
+      key: cfg.key,
+      base: cfg.base,
+      model: cfg.model
+    }
+  };
+}
+
+function applyRemoteChatConfig(chatConfig) {
+  if (!chatConfig || typeof chatConfig !== 'object') return;
+  if (chatConfig.provider) localStorage.setItem('chinese_srs_chat_provider', chatConfig.provider);
+  if (typeof chatConfig.key === 'string') localStorage.setItem('chinese_srs_chat_key', chatConfig.key);
+  if (chatConfig.base) localStorage.setItem('chinese_srs_chat_base', chatConfig.base);
+  if (chatConfig.model) localStorage.setItem('chinese_srs_chat_model', chatConfig.model);
+  loadChatConfig();
+  updateChatCfgStatus();
+}
+
 function setupPeerListeners() {
   peerConn.on('open', () => {
     document.getElementById('p2p-status').textContent = 'Conectado! Sincronizando…';
-    peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+    peerConn.send(buildSyncPayload());
   });
   peerConn.on('data', payload => {
     if (payload.type === 'SYNC_DATA' && Array.isArray(payload.data)) {
@@ -1516,7 +1540,8 @@ function setupPeerListeners() {
       save();
       updateStats();
       if (currentView === 'library') renderLibrary();
-      document.getElementById('p2p-status').textContent = 'Sincronizado com sucesso!';
+      if (payload.chatConfig) applyRemoteChatConfig(payload.chatConfig);
+      document.getElementById('p2p-status').textContent = 'Sincronizado (frases + config IA)!';
     }
   });
   peerConn.on('close', () => {
@@ -1526,7 +1551,7 @@ function setupPeerListeners() {
 
 function syncIfConnected() {
   if (peerConn && peerConn.open) {
-    peerConn.send({ type: 'SYNC_DATA', data: phrasesData });
+    peerConn.send(buildSyncPayload());
   }
 }
 
@@ -1696,8 +1721,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cfg-chat-provider')?.addEventListener('change', () => {
     const provider = document.getElementById('cfg-chat-provider').value;
     const modelInput = document.getElementById('cfg-chat-model');
-    if (modelInput && (modelInput.value.includes('grok') || modelInput.value.includes('gemini') || !modelInput.value)) {
-      modelInput.value = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
+    const custom = document.getElementById('cfg-chat-model-custom');
+    if (provider === 'gemini' && modelInput && modelInput.tagName === 'SELECT') {
+      modelInput.value = 'gemini-3.8-flash';
+      if (custom) custom.value = '';
+    } else if (provider !== 'gemini' && custom && !custom.value) {
+      custom.value = 'grok-3';
     }
     syncChatProviderUI();
   });
@@ -1775,7 +1804,7 @@ function getChatConfigFromStorage() {
     provider,
     key: localStorage.getItem('chinese_srs_chat_key') || '',
     base: localStorage.getItem('chinese_srs_chat_base') || 'https://api.x.ai/v1',
-    model: localStorage.getItem('chinese_srs_chat_model') || (provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3')
+    model: localStorage.getItem('chinese_srs_chat_model') || (provider === 'gemini' ? 'gemini-3.8-flash' : 'grok-3')
   };
 }
 
@@ -1785,16 +1814,36 @@ function syncChatProviderUI() {
   if (baseWrap) baseWrap.style.display = provider === 'gemini' ? 'none' : 'block';
 }
 
+function resolveChatModelFromForm() {
+  const custom = document.getElementById('cfg-chat-model-custom')?.value.trim();
+  if (custom) return custom;
+  const sel = document.getElementById('cfg-chat-model');
+  if (sel && sel.tagName === 'SELECT') return sel.value || 'gemini-3.8-flash';
+  return (sel?.value || 'gemini-3.8-flash').trim();
+}
+
 function loadChatConfig() {
   const cfg = getChatConfigFromStorage();
   const p = document.getElementById('cfg-chat-provider');
   const k = document.getElementById('cfg-chat-api-key');
   const b = document.getElementById('cfg-chat-api-base');
   const m = document.getElementById('cfg-chat-model');
+  const custom = document.getElementById('cfg-chat-model-custom');
   if (p) p.value = cfg.provider;
   if (k) k.value = cfg.key;
   if (b) b.value = cfg.base;
-  if (m) m.value = cfg.model;
+  const known = ['gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite','gemini-2.5-flash','gemini-2.0-flash'];
+  if (m && m.tagName === 'SELECT') {
+    if (known.includes(cfg.model)) {
+      m.value = cfg.model;
+      if (custom) custom.value = '';
+    } else {
+      m.value = 'gemini-3.8-flash';
+      if (custom) custom.value = cfg.model || '';
+    }
+  } else if (m) {
+    m.value = cfg.model;
+  }
   syncChatProviderUI();
   updateChatCfgStatus();
 }
@@ -1803,8 +1852,8 @@ function saveChatConfig() {
   const provider = document.getElementById('cfg-chat-provider')?.value || 'gemini';
   const key = document.getElementById('cfg-chat-api-key')?.value.trim() || '';
   const base = document.getElementById('cfg-chat-api-base')?.value.trim() || 'https://api.x.ai/v1';
-  const defaultModel = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
-  const model = document.getElementById('cfg-chat-model')?.value.trim() || defaultModel;
+  const defaultModel = provider === 'gemini' ? 'gemini-3.8-flash' : 'grok-3';
+  const model = resolveChatModelFromForm() || defaultModel;
   localStorage.setItem('chinese_srs_chat_provider', provider);
   localStorage.setItem('chinese_srs_chat_key', key);
   localStorage.setItem('chinese_srs_chat_base', base);
@@ -2019,12 +2068,12 @@ async function sendChatMessage() {
   // Prefer form values if user is on Config and just typed without saving
   const formKey = document.getElementById('cfg-chat-api-key')?.value?.trim();
   const formProvider = document.getElementById('cfg-chat-provider')?.value;
-  const formModel = document.getElementById('cfg-chat-model')?.value?.trim();
   const formBase = document.getElementById('cfg-chat-api-base')?.value?.trim();
   const provider = formProvider || cfg.provider;
   const apiKey = formKey || cfg.key;
   const base = formBase || cfg.base;
-  const defaultModel = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
+  const defaultModel = provider === 'gemini' ? 'gemini-3.8-flash' : 'grok-3';
+  const formModel = (typeof resolveChatModelFromForm === 'function' ? resolveChatModelFromForm() : '') || '';
   const model = formModel || cfg.model || defaultModel;
 
   if (!apiKey) {
