@@ -1683,6 +1683,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Chat IA
   loadChatConfig();
+  document.getElementById('chat-provider')?.addEventListener('change', () => {
+    const provider = document.getElementById('chat-provider').value;
+    const modelInput = document.getElementById('chat-model');
+    if (modelInput && (modelInput.value.includes('grok') || modelInput.value.includes('gemini') || !modelInput.value)) {
+      modelInput.value = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
+    }
+    syncChatProviderUI();
+  });
   document.getElementById('btn-save-chat-cfg')?.addEventListener('click', saveChatConfig);
   document.getElementById('btn-chat-send')?.addEventListener('click', sendChatMessage);
   document.getElementById('chat-input')?.addEventListener('keydown', e => {
@@ -1750,26 +1758,44 @@ let chatHistory = [
   }
 ];
 
+function syncChatProviderUI() {
+  const provider = document.getElementById('chat-provider')?.value || 'gemini';
+  const baseWrap = document.getElementById('chat-base-wrap');
+  const modelInput = document.getElementById('chat-model');
+  if (baseWrap) baseWrap.style.display = provider === 'gemini' ? 'none' : 'block';
+  if (modelInput && !modelInput.value) {
+    modelInput.placeholder = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
+  }
+}
+
 function loadChatConfig() {
   const key = localStorage.getItem('chinese_srs_chat_key') || '';
+  const provider = localStorage.getItem('chinese_srs_chat_provider') || 'gemini';
   const base = localStorage.getItem('chinese_srs_chat_base') || 'https://api.x.ai/v1';
-  const model = localStorage.getItem('chinese_srs_chat_model') || 'grok-3';
+  const model = localStorage.getItem('chinese_srs_chat_model') || (provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3');
   const k = document.getElementById('chat-api-key');
   const b = document.getElementById('chat-api-base');
   const m = document.getElementById('chat-model');
+  const p = document.getElementById('chat-provider');
   if (k) k.value = key;
   if (b) b.value = base;
   if (m) m.value = model;
+  if (p) p.value = provider;
+  syncChatProviderUI();
   const log = document.getElementById('chat-log');
   if (log && !log.children.length) {
-    appendChatBubble('system', 'Configure a chave da API acima para conversar. Compatível com xAI (Grok) e APIs no formato OpenAI.');
+    appendChatBubble('system', 'Padrão: Google Gemini (gratuito). Crie a chave em aistudio.google.com/apikey, cole acima e salve.');
   }
 }
 
 function saveChatConfig() {
+  const provider = document.getElementById('chat-provider')?.value || 'gemini';
+  localStorage.setItem('chinese_srs_chat_provider', provider);
   localStorage.setItem('chinese_srs_chat_key', document.getElementById('chat-api-key').value.trim());
   localStorage.setItem('chinese_srs_chat_base', document.getElementById('chat-api-base').value.trim() || 'https://api.x.ai/v1');
-  localStorage.setItem('chinese_srs_chat_model', document.getElementById('chat-model').value.trim() || 'grok-3');
+  const defaultModel = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
+  localStorage.setItem('chinese_srs_chat_model', document.getElementById('chat-model').value.trim() || defaultModel);
+  syncChatProviderUI();
   Swal.fire({
     toast: true, position: 'top', icon: 'success', title: 'Config salva neste aparelho',
     showConfirmButton: false, timer: 1400, background: '#1e293b', color: '#f1f5f9'
@@ -1786,20 +1812,88 @@ function appendChatBubble(role, text) {
   log.scrollTop = log.scrollHeight;
 }
 
+function buildGeminiContents(history) {
+  // Gemini uses user/model roles; system goes into systemInstruction
+  const contents = [];
+  for (const msg of history) {
+    if (msg.role === 'system') continue;
+    contents.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    });
+  }
+  return contents;
+}
+
+async function callGemini(apiKey, model, history) {
+  const systemText = (history.find(m => m.role === 'system') || {}).content || '';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const body = {
+    contents: buildGeminiContents(history.slice(-20)),
+    generationConfig: { temperature: 0.6 }
+  };
+  if (systemText) {
+    body.systemInstruction = { parts: [{ text: systemText }] };
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data.error?.message || data.message || ('HTTP ' + res.status);
+    if (res.status === 403 || res.status === 401) {
+      throw new Error(msg + ' — confira a chave em aistudio.google.com/apikey');
+    }
+    throw new Error(msg);
+  }
+  const reply = data.candidates?.[0]?.content?.parts?.map(p => p.text).filter(Boolean).join('') || '(sem resposta)';
+  return reply;
+}
+
+async function callOpenAICompat(apiKey, base, model, history) {
+  const res = await fetch(base.replace(/\/$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey
+    },
+    body: JSON.stringify({
+      model,
+      messages: history.slice(-20),
+      temperature: 0.6
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data.error?.message || data.message || ('HTTP ' + res.status);
+    if (res.status === 403 || res.status === 401) {
+      throw new Error(msg + ' — sem crédito/acesso na conta, ou chave inválida');
+    }
+    throw new Error(msg);
+  }
+  return data.choices?.[0]?.message?.content || '(sem resposta)';
+}
+
 async function sendChatMessage() {
   const input = document.getElementById('chat-input');
   const text = (input?.value || '').trim();
   if (!text) return;
 
+  const provider = document.getElementById('chat-provider')?.value || localStorage.getItem('chinese_srs_chat_provider') || 'gemini';
   const apiKey = (document.getElementById('chat-api-key')?.value || localStorage.getItem('chinese_srs_chat_key') || '').trim();
   const base = (document.getElementById('chat-api-base')?.value || 'https://api.x.ai/v1').replace(/\/$/, '');
-  const model = (document.getElementById('chat-model')?.value || 'grok-3').trim();
+  const defaultModel = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
+  const model = (document.getElementById('chat-model')?.value || defaultModel).trim();
 
   if (!apiKey) {
     Swal.fire({
       icon: 'info',
       title: 'Chave de API necessária',
-      text: 'Cole uma chave xAI ou OpenAI-compatible em Config da aba IA. Sem chave, o chat online não funciona (o app continua offline para estudo).',
+      html: provider === 'gemini'
+        ? 'Crie uma chave <strong>gratuita</strong> em <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#f59e0b;">aistudio.google.com/apikey</a>, cole no campo e salve.'
+        : 'Cole uma chave OpenAI-compatible. Na xAI, crédito $0 costuma retornar 403.',
       background: '#1e293b',
       color: '#f1f5f9',
       confirmButtonColor: '#f59e0b'
@@ -1813,27 +1907,13 @@ async function sendChatMessage() {
   appendChatBubble('system', 'Pensando…');
 
   try {
-    const res = await fetch(base + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey
-      },
-      body: JSON.stringify({
-        model,
-        messages: chatHistory.slice(-20),
-        temperature: 0.6
-      })
-    });
-    const data = await res.json();
-    // remove "Pensando…"
+    const reply = provider === 'gemini'
+      ? await callGemini(apiKey, model, chatHistory)
+      : await callOpenAICompat(apiKey, base, model, chatHistory);
+
     const log = document.getElementById('chat-log');
     if (log?.lastChild?.classList.contains('system')) log.lastChild.remove();
 
-    if (!res.ok) {
-      throw new Error(data.error?.message || data.message || ('HTTP ' + res.status));
-    }
-    const reply = data.choices?.[0]?.message?.content || '(sem resposta)';
     chatHistory.push({ role: 'assistant', content: reply });
     appendChatBubble('assistant', reply);
   } catch (err) {
