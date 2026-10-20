@@ -533,7 +533,16 @@ function switchView(name) {
   });
   if (name === 'library') renderLibrary();
   if (name === 'hard') renderHard();
-  if (name === 'manage') updateStats();
+  if (name === 'manage') {
+    updateStats();
+    loadChatConfig();
+  }
+  if (name === 'chat') {
+    loadChatConfig();
+    loadChatHistory();
+    updateChatCfgStatus();
+    updateChatStorageBar();
+  }
 }
 
 /* ---------- Library / Hard lists ---------- */
@@ -1683,15 +1692,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Chat IA
   loadChatConfig();
-  document.getElementById('chat-provider')?.addEventListener('change', () => {
-    const provider = document.getElementById('chat-provider').value;
-    const modelInput = document.getElementById('chat-model');
+  loadChatHistory();
+  document.getElementById('cfg-chat-provider')?.addEventListener('change', () => {
+    const provider = document.getElementById('cfg-chat-provider').value;
+    const modelInput = document.getElementById('cfg-chat-model');
     if (modelInput && (modelInput.value.includes('grok') || modelInput.value.includes('gemini') || !modelInput.value)) {
       modelInput.value = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
     }
     syncChatProviderUI();
   });
   document.getElementById('btn-save-chat-cfg')?.addEventListener('click', saveChatConfig);
+  document.getElementById('btn-chat-clear')?.addEventListener('click', clearChatHistory);
   document.getElementById('btn-chat-send')?.addEventListener('click', sendChatMessage);
   document.getElementById('chat-input')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
@@ -1751,54 +1762,179 @@ function showUninstallHelp() {
 }
 
 /* ---------- Chat IA (API opcional) ---------- */
-let chatHistory = [
-  {
-    role: 'system',
-    content: 'Você é um tutor de chinês mandarim paciente. Ajuda com frases, pinyin, tradução PT-BR e SRS. Responda em português, de forma clara e objetiva.'
-  }
-];
+const CHAT_HISTORY_KEY = 'chinese_srs_chat_history';
+const CHAT_SYSTEM = {
+  role: 'system',
+  content: 'Você é um tutor de chinês mandarim paciente. Ajuda com frases, pinyin, tradução PT-BR e SRS. Responda em português, de forma clara e objetiva.'
+};
+let chatHistory = [CHAT_SYSTEM];
+
+function getChatConfigFromStorage() {
+  const provider = localStorage.getItem('chinese_srs_chat_provider') || 'gemini';
+  return {
+    provider,
+    key: localStorage.getItem('chinese_srs_chat_key') || '',
+    base: localStorage.getItem('chinese_srs_chat_base') || 'https://api.x.ai/v1',
+    model: localStorage.getItem('chinese_srs_chat_model') || (provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3')
+  };
+}
 
 function syncChatProviderUI() {
-  const provider = document.getElementById('chat-provider')?.value || 'gemini';
-  const baseWrap = document.getElementById('chat-base-wrap');
-  const modelInput = document.getElementById('chat-model');
+  const provider = document.getElementById('cfg-chat-provider')?.value || 'gemini';
+  const baseWrap = document.getElementById('cfg-chat-base-wrap');
   if (baseWrap) baseWrap.style.display = provider === 'gemini' ? 'none' : 'block';
-  if (modelInput && !modelInput.value) {
-    modelInput.placeholder = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
-  }
 }
 
 function loadChatConfig() {
-  const key = localStorage.getItem('chinese_srs_chat_key') || '';
-  const provider = localStorage.getItem('chinese_srs_chat_provider') || 'gemini';
-  const base = localStorage.getItem('chinese_srs_chat_base') || 'https://api.x.ai/v1';
-  const model = localStorage.getItem('chinese_srs_chat_model') || (provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3');
-  const k = document.getElementById('chat-api-key');
-  const b = document.getElementById('chat-api-base');
-  const m = document.getElementById('chat-model');
-  const p = document.getElementById('chat-provider');
-  if (k) k.value = key;
-  if (b) b.value = base;
-  if (m) m.value = model;
-  if (p) p.value = provider;
+  const cfg = getChatConfigFromStorage();
+  const p = document.getElementById('cfg-chat-provider');
+  const k = document.getElementById('cfg-chat-api-key');
+  const b = document.getElementById('cfg-chat-api-base');
+  const m = document.getElementById('cfg-chat-model');
+  if (p) p.value = cfg.provider;
+  if (k) k.value = cfg.key;
+  if (b) b.value = cfg.base;
+  if (m) m.value = cfg.model;
   syncChatProviderUI();
-  const log = document.getElementById('chat-log');
-  if (log && !log.children.length) {
-    appendChatBubble('system', 'Padrão: Google Gemini (gratuito). Crie a chave em aistudio.google.com/apikey, cole acima e salve.');
-  }
+  updateChatCfgStatus();
 }
 
 function saveChatConfig() {
-  const provider = document.getElementById('chat-provider')?.value || 'gemini';
-  localStorage.setItem('chinese_srs_chat_provider', provider);
-  localStorage.setItem('chinese_srs_chat_key', document.getElementById('chat-api-key').value.trim());
-  localStorage.setItem('chinese_srs_chat_base', document.getElementById('chat-api-base').value.trim() || 'https://api.x.ai/v1');
+  const provider = document.getElementById('cfg-chat-provider')?.value || 'gemini';
+  const key = document.getElementById('cfg-chat-api-key')?.value.trim() || '';
+  const base = document.getElementById('cfg-chat-api-base')?.value.trim() || 'https://api.x.ai/v1';
   const defaultModel = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
-  localStorage.setItem('chinese_srs_chat_model', document.getElementById('chat-model').value.trim() || defaultModel);
+  const model = document.getElementById('cfg-chat-model')?.value.trim() || defaultModel;
+  localStorage.setItem('chinese_srs_chat_provider', provider);
+  localStorage.setItem('chinese_srs_chat_key', key);
+  localStorage.setItem('chinese_srs_chat_base', base);
+  localStorage.setItem('chinese_srs_chat_model', model);
   syncChatProviderUI();
+  updateChatCfgStatus();
+  updateChatStorageBar();
   Swal.fire({
-    toast: true, position: 'top', icon: 'success', title: 'Config salva neste aparelho',
+    toast: true, position: 'top', icon: 'success', title: 'Config da IA salva',
     showConfirmButton: false, timer: 1400, background: '#1e293b', color: '#f1f5f9'
+  });
+}
+
+function updateChatCfgStatus() {
+  const el = document.getElementById('chat-cfg-status');
+  if (!el) return;
+  const cfg = getChatConfigFromStorage();
+  if (!cfg.key) {
+    el.textContent = 'API: não configurada — vá em Config e salve a chave';
+    el.classList.remove('active');
+  } else {
+    el.textContent = `API: ${cfg.provider === 'gemini' ? 'Gemini' : 'OpenAI-compat'} · ${cfg.model} · chave salva`;
+    el.classList.add('active');
+  }
+}
+
+function estimateLocalStorageBytes() {
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || '';
+      total += (k.length + v.length) * 2; // UTF-16
+    }
+  } catch (_) {}
+  return total;
+}
+
+function updateChatStorageBar() {
+  const fill = document.getElementById('chat-storage-fill');
+  const text = document.getElementById('chat-storage-text');
+  const hint = document.getElementById('chat-storage-hint');
+  if (!fill || !text) return;
+
+  const used = estimateLocalStorageBytes();
+  const quota = 5 * 1024 * 1024; // ~5 MB típico
+  const pct = Math.min(100, Math.round((used / quota) * 100));
+  fill.style.width = pct + '%';
+  fill.classList.toggle('warn', pct >= 60 && pct < 85);
+  fill.classList.toggle('danger', pct >= 85);
+  text.textContent = pct + '%';
+
+  const chatRaw = localStorage.getItem(CHAT_HISTORY_KEY) || '';
+  const chatBytes = chatRaw ? chatRaw.length * 2 : 0;
+  const fmt = (n) => n < 1024 ? n + ' B' : (n < 1024 * 1024 ? (n / 1024).toFixed(1) + ' KB' : (n / (1024 * 1024)).toFixed(2) + ' MB');
+  if (hint) {
+    hint.textContent = `${fmt(used)} usados no app · chat ${fmt(chatBytes)} · cota ~${fmt(quota)}`;
+  }
+}
+
+function saveChatHistory() {
+  try {
+    const toSave = chatHistory.filter(m => m.role !== 'system');
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(toSave));
+  } catch (e) {
+    console.warn('chat history save failed', e);
+    Swal.fire({
+      toast: true, position: 'top', icon: 'warning',
+      title: 'Armazenamento cheio — apague o chat ou dados antigos',
+      showConfirmButton: false, timer: 2500, background: '#1e293b', color: '#f1f5f9'
+    });
+  }
+  updateChatStorageBar();
+}
+
+function loadChatHistory() {
+  chatHistory = [CHAT_SYSTEM];
+  try {
+    const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        arr.forEach(m => {
+          if (m && (m.role === 'user' || m.role === 'assistant') && m.content) {
+            chatHistory.push({ role: m.role, content: m.content });
+          }
+        });
+      }
+    }
+  } catch (_) {
+    chatHistory = [CHAT_SYSTEM];
+  }
+  renderChatLogFromHistory();
+  updateChatStorageBar();
+}
+
+function renderChatLogFromHistory() {
+  const log = document.getElementById('chat-log');
+  if (!log) return;
+  log.innerHTML = '';
+  const msgs = chatHistory.filter(m => m.role !== 'system');
+  if (!msgs.length) {
+    appendChatBubble('system', 'Nenhuma mensagem ainda. Configure a API em Config e comece a conversar.');
+    return;
+  }
+  msgs.forEach(m => appendChatBubble(m.role === 'user' ? 'user' : 'assistant', m.content));
+}
+
+function clearChatHistory() {
+  Swal.fire({
+    title: 'Apagar todo o chat?',
+    text: 'As mensagens salvas neste aparelho serão removidas. A chave da API permanece.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Apagar tudo',
+    cancelButtonText: 'Cancelar',
+    background: '#1e293b',
+    color: '#f1f5f9',
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#475569'
+  }).then(res => {
+    if (!res.isConfirmed) return;
+    chatHistory = [CHAT_SYSTEM];
+    localStorage.removeItem(CHAT_HISTORY_KEY);
+    renderChatLogFromHistory();
+    updateChatStorageBar();
+    Swal.fire({
+      toast: true, position: 'top', icon: 'success', title: 'Chat apagado',
+      showConfirmButton: false, timer: 1400, background: '#1e293b', color: '#f1f5f9'
+    });
   });
 }
 
@@ -1813,7 +1949,6 @@ function appendChatBubble(role, text) {
 }
 
 function buildGeminiContents(history) {
-  // Gemini uses user/model roles; system goes into systemInstruction
   const contents = [];
   for (const msg of history) {
     if (msg.role === 'system') continue;
@@ -1848,8 +1983,7 @@ async function callGemini(apiKey, model, history) {
     }
     throw new Error(msg);
   }
-  const reply = data.candidates?.[0]?.content?.parts?.map(p => p.text).filter(Boolean).join('') || '(sem resposta)';
-  return reply;
+  return data.candidates?.[0]?.content?.parts?.map(p => p.text).filter(Boolean).join('') || '(sem resposta)';
 }
 
 async function callOpenAICompat(apiKey, base, model, history) {
@@ -1881,19 +2015,23 @@ async function sendChatMessage() {
   const text = (input?.value || '').trim();
   if (!text) return;
 
-  const provider = document.getElementById('chat-provider')?.value || localStorage.getItem('chinese_srs_chat_provider') || 'gemini';
-  const apiKey = (document.getElementById('chat-api-key')?.value || localStorage.getItem('chinese_srs_chat_key') || '').trim();
-  const base = (document.getElementById('chat-api-base')?.value || 'https://api.x.ai/v1').replace(/\/$/, '');
+  const cfg = getChatConfigFromStorage();
+  // Prefer form values if user is on Config and just typed without saving
+  const formKey = document.getElementById('cfg-chat-api-key')?.value?.trim();
+  const formProvider = document.getElementById('cfg-chat-provider')?.value;
+  const formModel = document.getElementById('cfg-chat-model')?.value?.trim();
+  const formBase = document.getElementById('cfg-chat-api-base')?.value?.trim();
+  const provider = formProvider || cfg.provider;
+  const apiKey = formKey || cfg.key;
+  const base = formBase || cfg.base;
   const defaultModel = provider === 'gemini' ? 'gemini-2.5-flash' : 'grok-3';
-  const model = (document.getElementById('chat-model')?.value || defaultModel).trim();
+  const model = formModel || cfg.model || defaultModel;
 
   if (!apiKey) {
     Swal.fire({
       icon: 'info',
-      title: 'Chave de API necessária',
-      html: provider === 'gemini'
-        ? 'Crie uma chave <strong>gratuita</strong> em <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#f59e0b;">aistudio.google.com/apikey</a>, cole no campo e salve.'
-        : 'Cole uma chave OpenAI-compatible. Na xAI, crédito $0 costuma retornar 403.',
+      title: 'Configure a API em Config',
+      html: 'Vá em <strong>Config</strong>, cole a chave gratuita do Gemini e toque em Salvar.',
       background: '#1e293b',
       color: '#f1f5f9',
       confirmButtonColor: '#f59e0b'
@@ -1904,6 +2042,7 @@ async function sendChatMessage() {
   input.value = '';
   appendChatBubble('user', text);
   chatHistory.push({ role: 'user', content: text });
+  saveChatHistory();
   appendChatBubble('system', 'Pensando…');
 
   try {
@@ -1915,6 +2054,7 @@ async function sendChatMessage() {
     if (log?.lastChild?.classList.contains('system')) log.lastChild.remove();
 
     chatHistory.push({ role: 'assistant', content: reply });
+    saveChatHistory();
     appendChatBubble('assistant', reply);
   } catch (err) {
     const log = document.getElementById('chat-log');

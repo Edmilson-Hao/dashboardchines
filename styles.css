@@ -1199,3 +1199,45 @@ body {
 .chat-input-row input:focus {
   border-color: var(--accent);
 }
+
+.chat-storage-wrap {
+  margin-top: 0.25rem;
+}
+
+.chat-storage-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.chat-storage-track {
+  height: 8px;
+  background: var(--elevated);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.chat-storage-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.25s ease, background 0.25s ease;
+}
+
+.chat-storage-fill.warn {
+  background: #f97316;
+}
+
+.chat-storage-fill.danger {
+  background: var(--danger);
+}
+
+.chat-storage-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
