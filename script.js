@@ -1659,6 +1659,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('file-input').addEventListener('change', handleImport);
   document.getElementById('btn-reset').addEventListener('click', resetSystem);
   document.getElementById('btn-p2p').addEventListener('click', openP2P);
+  document.getElementById('p2p-close')?.addEventListener('click', closeP2P);
+  document.getElementById('modal-p2p')?.addEventListener('click', e => {
+    if (e.target.id === 'modal-p2p') closeP2P();
+  });
+  document.getElementById('btn-copy-id')?.addEventListener('click', copyPeerId);
+  document.getElementById('btn-connect-peer')?.addEventListener('click', connectPeer);
   document.getElementById('btn-semantic-enable')?.addEventListener('click', enableSemanticModel);
   document.getElementById('btn-semantic-disable')?.addEventListener('click', disableSemanticModel);
   updateSemanticUI();
@@ -1848,13 +1854,6 @@ clearPersistedSession = function () {
   _clearPersistedSession();
   updateResumeButton();
 };
-  document.getElementById('p2p-close').addEventListener('click', closeP2P);
-  document.getElementById('modal-p2p').addEventListener('click', e => {
-    if (e.target.id === 'modal-p2p') closeP2P();
-  });
-  document.getElementById('btn-copy-id').addEventListener('click', copyPeerId);
-  document.getElementById('btn-connect-peer').addEventListener('click', connectPeer);
-});
 
 /* Service Worker */
 if ('serviceWorker' in navigator) {
