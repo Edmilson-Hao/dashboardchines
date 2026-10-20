@@ -68,6 +68,8 @@ let sessionLog = []; // { id, type, prompt, expected, userAnswer, systemCorrect,
 let peer = null;
 let peerConn = null;
 let currentDetailId = null;
+const SESSION_KEY = 'chinese_srs_active_session';
+let sessionStartedAt = null;
 
 /* Semantic offline model (optional ~100MB) */
 const SEMANTIC_MODEL_ID = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
@@ -630,6 +632,137 @@ function buildMcOptions(correctPhrase) {
   return opts;
 }
 
+function persistSession() {
+  try {
+    if (!studyQueue.length) {
+      localStorage.removeItem(SESSION_KEY);
+      return;
+    }
+    const payload = {
+      version: 1,
+      selectedMode,
+      studyIndex,
+      answered,
+      sessionLog,
+      sessionStartedAt: sessionStartedAt || new Date().toISOString(),
+      queueIds: studyQueue.map(p => p.id),
+      currentExercise: currentExercise ? {
+        phraseId: currentExercise.phrase.id,
+        type: currentExercise.type,
+        options: currentExercise.options || null
+      } : null
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.warn('persistSession failed', e);
+  }
+}
+
+function clearPersistedSession() {
+  localStorage.removeItem(SESSION_KEY);
+  sessionStartedAt = null;
+}
+
+function loadPersistedSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.queueIds) || !data.queueIds.length) return null;
+    const queue = data.queueIds
+      .map(id => phrasesData.find(p => p.id === id))
+      .filter(Boolean);
+    if (!queue.length) {
+      clearPersistedSession();
+      return null;
+    }
+    return { data, queue };
+  } catch {
+    clearPersistedSession();
+    return null;
+  }
+}
+
+function offerResumeSession() {
+  const loaded = loadPersistedSession();
+  if (!loaded) return;
+  const { data, queue } = loaded;
+  const done = Array.isArray(data.sessionLog) ? data.sessionLog.length : 0;
+  const total = queue.length;
+  const idx = Math.min(data.studyIndex || 0, total - 1);
+
+  Swal.fire({
+    title: 'Sessão interrompida',
+    html: `
+      <p style="color:#94a3b8;font-size:0.9rem;line-height:1.45;text-align:left;">
+        Há uma revisão salva: <strong style="color:#f1f5f9;">${done}</strong> respondida(s) de
+        <strong style="color:#f1f5f9;">${total}</strong> · posição
+        <strong style="color:#f1f5f9;">${idx + 1}/${total}</strong>.
+      </p>
+      <p style="color:#94a3b8;font-size:0.85rem;text-align:left;margin-top:0.5rem;">
+        Pode continuar de onde parou. O relatório final incluirá tudo o que já foi respondido.
+      </p>
+    `,
+    icon: 'info',
+    showDenyButton: true,
+    showCancelButton: true,
+    confirmButtonText: 'Continuar',
+    denyButtonText: 'Descartar',
+    cancelButtonText: 'Depois',
+    background: '#1e293b',
+    color: '#f1f5f9',
+    confirmButtonColor: '#f59e0b',
+    denyButtonColor: '#ef4444',
+    cancelButtonColor: '#475569'
+  }).then(res => {
+    if (res.isConfirmed) {
+      resumeSession(data, queue);
+    } else if (res.isDenied) {
+      clearPersistedSession();
+      Swal.fire({
+        toast: true, position: 'top', icon: 'info', title: 'Sessão descartada',
+        showConfirmButton: false, timer: 1600, background: '#1e293b', color: '#f1f5f9'
+      });
+    }
+  });
+}
+
+function resumeSession(data, queue) {
+  studyQueue = queue;
+  studyIndex = Math.min(data.studyIndex || 0, queue.length - 1);
+  sessionLog = Array.isArray(data.sessionLog) ? data.sessionLog : [];
+  selectedMode = data.selectedMode || selectedMode;
+  sessionStartedAt = data.sessionStartedAt || new Date().toISOString();
+  answered = false;
+
+  // If last card was already answered, advance to next
+  if (data.answered && studyIndex < studyQueue.length - 1) {
+    studyIndex += 1;
+  } else if (data.answered && studyIndex >= studyQueue.length - 1) {
+    // session was basically done
+    clearPersistedSession();
+    showSessionSummary(false);
+    return;
+  }
+
+  // Restore exercise type for current card if same phrase
+  const ce = data.currentExercise;
+  if (ce && ce.phraseId === studyQueue[studyIndex].id && !data.answered) {
+    currentExercise = {
+      phrase: studyQueue[studyIndex],
+      type: ce.type,
+      options: ce.options || null
+    };
+    document.getElementById('study-screen').classList.add('active');
+    showCurrentExercise(true);
+  } else {
+    currentExercise = null;
+    document.getElementById('study-screen').classList.add('active');
+    showCurrentExercise(false);
+  }
+  persistSession();
+}
+
 function startStudy(queue) {
   if (!queue || queue.length === 0) {
     Swal.fire({
@@ -642,19 +775,29 @@ function startStudy(queue) {
     });
     return;
   }
+  clearPersistedSession();
   studyQueue = queue.slice().sort(() => Math.random() - 0.5);
   studyIndex = 0;
   answered = false;
   sessionLog = [];
+  sessionStartedAt = new Date().toISOString();
   document.getElementById('study-screen').classList.add('active');
-  showCurrentExercise();
+  showCurrentExercise(false);
+  persistSession();
 }
 
-function showCurrentExercise() {
+function showCurrentExercise(restore) {
   answered = false;
   const phrase = studyQueue[studyIndex];
-  const type = pickExerciseType();
-  currentExercise = { phrase, type };
+  if (!phrase) return;
+
+  if (!(restore && currentExercise && currentExercise.phrase && currentExercise.phrase.id === phrase.id)) {
+    const type = pickExerciseType();
+    currentExercise = { phrase, type };
+  } else {
+    currentExercise.phrase = phrase;
+  }
+  const type = currentExercise.type;
 
   document.getElementById('study-counter').textContent = `${studyIndex + 1}/${studyQueue.length}`;
   const pct = ((studyIndex) / studyQueue.length) * 100;
@@ -705,13 +848,16 @@ function showCurrentExercise() {
     promptEl.textContent = phrase.hanzi;
     typingArea.classList.add('hidden');
     mcArea.classList.remove('hidden');
-    const opts = buildMcOptions(phrase);
+    const opts = (restore && currentExercise.options && currentExercise.options.length)
+      ? currentExercise.options
+      : buildMcOptions(phrase);
     currentExercise.options = opts;
     mcArea.innerHTML = opts.map((o, i) =>
       `<button class="mc-option" data-idx="${i}">${escapeHtml(o)}</button>`
     ).join('');
     btnCheck.classList.add('hidden'); // auto on select
   }
+  persistSession();
 }
 
 async function checkAnswer() {
@@ -820,6 +966,7 @@ async function checkAnswer() {
 
   const pct = ((studyIndex + 1) / studyQueue.length) * 100;
   document.getElementById('study-bar').style.width = pct + '%';
+  persistSession();
 }
 
 function revealAnswer() {
@@ -862,15 +1009,18 @@ function revealAnswer() {
       if (normalize(btn.textContent) === normalize(phrase.traducao)) btn.classList.add('correct');
     });
   }
+  persistSession();
 }
 
 function nextExercise() {
   studyIndex++;
+  answered = false;
   if (studyIndex >= studyQueue.length) {
     finishStudy();
     return;
   }
-  showCurrentExercise();
+  showCurrentExercise(false);
+  persistSession();
 }
 
 function typeLabel(type) {
@@ -949,6 +1099,13 @@ function showSessionSummary(partial) {
   if (currentView === 'library') renderLibrary();
   if (currentView === 'hard') renderHard();
 
+  // Sessão completa → limpa retomada. Parcial → mantém no localStorage.
+  if (!partial) {
+    clearPersistedSession();
+  } else {
+    persistSession();
+  }
+
   if (sessionLog.length === 0) {
     if (!partial) {
       Swal.fire({
@@ -1023,22 +1180,20 @@ function finishStudy() {
 }
 
 function closeStudy() {
-  const hasMore = studyIndex < studyQueue.length || (studyIndex < studyQueue.length - 1);
   const stillGoing = studyIndex < studyQueue.length && !(studyIndex === studyQueue.length - 1 && answered);
 
   if (stillGoing) {
+    persistSession();
     Swal.fire({
       title: 'Sair da sessão?',
-      text: sessionLog.length
-        ? 'O progresso das respostas já dadas será mantido. Você poderá copiar o relatório parcial.'
-        : 'O progresso das respostas já dadas será mantido.',
+      text: 'O progresso fica salvo neste aparelho. Na próxima abertura você pode continuar de onde parou e gerar o relatório completo.',
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Sair',
-      cancelButtonText: 'Continuar',
+      confirmButtonText: 'Sair e salvar',
+      cancelButtonText: 'Continuar estudando',
       background: '#1e293b',
       color: '#f1f5f9',
-      confirmButtonColor: '#ef4444',
+      confirmButtonColor: '#f59e0b',
       cancelButtonColor: '#475569'
     }).then(res => {
       if (res.isConfirmed) {
@@ -1053,6 +1208,7 @@ function closeStudy() {
   } else if (sessionLog.length > 0) {
     showSessionSummary(false);
   } else {
+    clearPersistedSession();
     document.getElementById('study-screen').classList.remove('active');
     updateStats();
   }
@@ -1373,8 +1529,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Splash
   setTimeout(() => {
     document.getElementById('splash').classList.add('hide');
-    setTimeout(() => document.getElementById('splash').remove(), 450);
+    setTimeout(() => {
+      document.getElementById('splash')?.remove();
+      // Após splash, oferece retomada se houver sessão salva
+      offerResumeSession();
+    }, 450);
   }, 900);
+
+  // Salva sessão se o app for fechado / segundo plano
+  window.addEventListener('pagehide', () => {
+    if (studyQueue.length) persistSession();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && studyQueue.length) persistSession();
+  });
 
   // Nav
   document.querySelectorAll('.nav-item').forEach(btn => {
@@ -1498,6 +1666,188 @@ document.addEventListener('DOMContentLoaded', () => {
   if (semanticEnabled) {
     loadSemanticModel().catch(() => {});
   }
+
+  document.getElementById('btn-uninstall-help')?.addEventListener('click', showUninstallHelp);
+  document.getElementById('btn-resume-session')?.addEventListener('click', () => {
+    const loaded = loadPersistedSession();
+    if (loaded) resumeSession(loaded.data, loaded.queue);
+    else updateResumeButton();
+  });
+  updateResumeButton();
+
+  // Chat IA
+  loadChatConfig();
+  document.getElementById('btn-save-chat-cfg')?.addEventListener('click', saveChatConfig);
+  document.getElementById('btn-chat-send')?.addEventListener('click', sendChatMessage);
+  document.getElementById('chat-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+  document.getElementById('btn-chat-report')?.addEventListener('click', () => {
+    if (!sessionLog.length) {
+      const loaded = loadPersistedSession();
+      if (loaded && loaded.data.sessionLog?.length) {
+        sessionLog = loaded.data.sessionLog;
+      }
+    }
+    if (!sessionLog.length) {
+      Swal.fire({
+        toast: true, position: 'top', icon: 'info',
+        title: 'Nenhum relatório de sessão disponível',
+        showConfirmButton: false, timer: 1800,
+        background: '#1e293b', color: '#f1f5f9'
+      });
+      return;
+    }
+    const report = buildSessionReport();
+    document.getElementById('chat-input').value =
+      'Avalie este relatório de estudo e diga o que eu errei de verdade:\n\n' + report;
+  });
+});
+
+function updateResumeButton() {
+  const btn = document.getElementById('btn-resume-session');
+  if (!btn) return;
+  const has = !!loadPersistedSession();
+  btn.classList.toggle('hidden', !has);
+}
+
+function showUninstallHelp() {
+  Swal.fire({
+    title: 'Como desinstalar',
+    html: `
+      <div style="text-align:left;font-size:0.88rem;color:#94a3b8;line-height:1.5;">
+        <p><strong style="color:#f1f5f9;">Android (Chrome)</strong></p>
+        <ol style="padding-left:1.1rem;margin:0.35rem 0 0.75rem;">
+          <li>Configurações do celular → Apps → Chinês SRS → Desinstalar</li>
+          <li>Ou: pressione longo o ícone → Informações do app → Desinstalar</li>
+          <li>Depois no Chrome: Configurações de sites → edmilson-hao.github.io → Limpar dados</li>
+        </ol>
+        <p><strong style="color:#f1f5f9;">Por que não há botão “Desinstalar” no app?</strong></p>
+        <p>O navegador / sistema operacional não permite que uma PWA se desinstale sozinha por segurança.</p>
+      </div>
+    `,
+    background: '#1e293b',
+    color: '#f1f5f9',
+    confirmButtonColor: '#f59e0b',
+    confirmButtonText: 'Entendi'
+  });
+}
+
+/* ---------- Chat IA (API opcional) ---------- */
+let chatHistory = [
+  {
+    role: 'system',
+    content: 'Você é um tutor de chinês mandarim paciente. Ajuda com frases, pinyin, tradução PT-BR e SRS. Responda em português, de forma clara e objetiva.'
+  }
+];
+
+function loadChatConfig() {
+  const key = localStorage.getItem('chinese_srs_chat_key') || '';
+  const base = localStorage.getItem('chinese_srs_chat_base') || 'https://api.x.ai/v1';
+  const model = localStorage.getItem('chinese_srs_chat_model') || 'grok-3';
+  const k = document.getElementById('chat-api-key');
+  const b = document.getElementById('chat-api-base');
+  const m = document.getElementById('chat-model');
+  if (k) k.value = key;
+  if (b) b.value = base;
+  if (m) m.value = model;
+  const log = document.getElementById('chat-log');
+  if (log && !log.children.length) {
+    appendChatBubble('system', 'Configure a chave da API acima para conversar. Compatível com xAI (Grok) e APIs no formato OpenAI.');
+  }
+}
+
+function saveChatConfig() {
+  localStorage.setItem('chinese_srs_chat_key', document.getElementById('chat-api-key').value.trim());
+  localStorage.setItem('chinese_srs_chat_base', document.getElementById('chat-api-base').value.trim() || 'https://api.x.ai/v1');
+  localStorage.setItem('chinese_srs_chat_model', document.getElementById('chat-model').value.trim() || 'grok-3');
+  Swal.fire({
+    toast: true, position: 'top', icon: 'success', title: 'Config salva neste aparelho',
+    showConfirmButton: false, timer: 1400, background: '#1e293b', color: '#f1f5f9'
+  });
+}
+
+function appendChatBubble(role, text) {
+  const log = document.getElementById('chat-log');
+  if (!log) return;
+  const div = document.createElement('div');
+  div.className = 'chat-bubble ' + (role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant');
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+
+  const apiKey = (document.getElementById('chat-api-key')?.value || localStorage.getItem('chinese_srs_chat_key') || '').trim();
+  const base = (document.getElementById('chat-api-base')?.value || 'https://api.x.ai/v1').replace(/\/$/, '');
+  const model = (document.getElementById('chat-model')?.value || 'grok-3').trim();
+
+  if (!apiKey) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Chave de API necessária',
+      text: 'Cole uma chave xAI ou OpenAI-compatible em Config da aba IA. Sem chave, o chat online não funciona (o app continua offline para estudo).',
+      background: '#1e293b',
+      color: '#f1f5f9',
+      confirmButtonColor: '#f59e0b'
+    });
+    return;
+  }
+
+  input.value = '';
+  appendChatBubble('user', text);
+  chatHistory.push({ role: 'user', content: text });
+  appendChatBubble('system', 'Pensando…');
+
+  try {
+    const res = await fetch(base + '/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model,
+        messages: chatHistory.slice(-20),
+        temperature: 0.6
+      })
+    });
+    const data = await res.json();
+    // remove "Pensando…"
+    const log = document.getElementById('chat-log');
+    if (log?.lastChild?.classList.contains('system')) log.lastChild.remove();
+
+    if (!res.ok) {
+      throw new Error(data.error?.message || data.message || ('HTTP ' + res.status));
+    }
+    const reply = data.choices?.[0]?.message?.content || '(sem resposta)';
+    chatHistory.push({ role: 'assistant', content: reply });
+    appendChatBubble('assistant', reply);
+  } catch (err) {
+    const log = document.getElementById('chat-log');
+    if (log?.lastChild?.classList.contains('system')) log.lastChild.remove();
+    appendChatBubble('system', 'Erro: ' + (err.message || String(err)));
+  }
+}
+
+// Keep resume button in sync when session cleared/saved
+const _persistSession = persistSession;
+persistSession = function () {
+  _persistSession();
+  updateResumeButton();
+};
+const _clearPersistedSession = clearPersistedSession;
+clearPersistedSession = function () {
+  _clearPersistedSession();
+  updateResumeButton();
+};
   document.getElementById('p2p-close').addEventListener('click', closeP2P);
   document.getElementById('modal-p2p').addEventListener('click', e => {
     if (e.target.id === 'modal-p2p') closeP2P();

@@ -4,11 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Chinês SRS — Digitação</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json?v=26">
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <meta name="apple-mobile-web-app-title" content="Chinês SRS">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +20,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-  <link rel="stylesheet" href="styles.css?v=24" />
+  <link rel="stylesheet" href="styles.css?v=26" />
 </head>
 <body>
 
@@ -54,6 +58,9 @@
         <div class="hero-sub" id="hero-sub">Frases prontas para revisão ou novas</div>
         <button class="btn btn-primary btn-full" id="btn-start-study" disabled>
           <i class="fa-solid fa-play"></i> Iniciar sessão
+        </button>
+        <button class="btn btn-outline btn-full hidden" id="btn-resume-session" style="margin-top:0.5rem;">
+          <i class="fa-solid fa-rotate-left"></i> Continuar sessão salva
         </button>
       </div>
 
@@ -181,12 +188,47 @@
         </div>
       </div>
 
+      <div class="manage-section">
+        <h3><i class="fa-solid fa-mobile-screen"></i> Desinstalar app</h3>
+        <p>Navegadores não permitem desinstalar PWA por um botão interno. Veja o passo a passo.</p>
+        <button class="btn btn-outline btn-full" id="btn-uninstall-help">
+          <i class="fa-solid fa-circle-info"></i> Como desinstalar
+        </button>
+      </div>
+
       <div class="manage-section danger-zone">
         <h3><i class="fa-solid fa-triangle-exclamation"></i> Zona de perigo</h3>
         <p>Apaga todo o progresso e restaura as frases padrão.</p>
         <button class="btn btn-danger btn-full" id="btn-reset">
           <i class="fa-solid fa-rotate-right"></i> Resetar sistema
         </button>
+      </div>
+    </section>
+
+    <!-- VIEW: Chat IA -->
+    <section class="view" id="view-chat">
+      <p class="section-title">Assistente de estudo</p>
+      <div class="manage-section" style="margin-bottom:0.75rem;">
+        <p style="margin-bottom:0.5rem;">Conversa online com uma IA (precisa de chave de API). Ideal para tirar dúvidas de chinês ou validar o relatório da sessão.</p>
+        <div class="form-group" style="margin-bottom:0.5rem;">
+          <label for="chat-api-key">Chave da API (xAI / OpenAI-compatible)</label>
+          <input type="password" id="chat-api-key" placeholder="xai-... ou sk-..." autocomplete="off" />
+        </div>
+        <div class="form-group" style="margin-bottom:0.5rem;">
+          <label for="chat-api-base">URL base</label>
+          <input type="text" id="chat-api-base" placeholder="https://api.x.ai/v1" />
+        </div>
+        <div class="form-group" style="margin-bottom:0.5rem;">
+          <label for="chat-model">Modelo</label>
+          <input type="text" id="chat-model" placeholder="grok-3" />
+        </div>
+        <button class="btn btn-outline btn-sm" id="btn-save-chat-cfg"><i class="fa-solid fa-floppy-disk"></i> Salvar config</button>
+        <button class="btn btn-outline btn-sm" id="btn-chat-report" style="margin-left:0.35rem;"><i class="fa-solid fa-file-lines"></i> Colar relatório da sessão</button>
+      </div>
+      <div class="chat-log" id="chat-log"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Pergunte sobre chinês, frases, SRS…" />
+        <button class="btn btn-primary" id="btn-chat-send"><i class="fa-solid fa-paper-plane"></i></button>
       </div>
     </section>
   </main>
@@ -205,6 +247,10 @@
       <button class="nav-item" data-view="hard">
         <i class="fa-solid fa-fire"></i>
         <span>Difíceis</span>
+      </button>
+      <button class="nav-item" data-view="chat">
+        <i class="fa-solid fa-comments"></i>
+        <span>IA</span>
       </button>
       <button class="nav-item" data-view="manage">
         <i class="fa-solid fa-gear"></i>
@@ -341,6 +387,6 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="script.js?v=24"></script>
+  <script src="script.js?v=26"></script>
 </body>
 </html>

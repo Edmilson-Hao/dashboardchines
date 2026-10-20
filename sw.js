@@ -1,11 +1,14 @@
-const CACHE_NAME = 'chinese-srs-type-v24';
+const CACHE_NAME = 'chinese-srs-type-v26';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=24',
-  './script.js?v=24',
+  './styles.css?v=26',
+  './script.js?v=26',
   './manifest.json',
-  './icon.svg'
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {
@@ -25,6 +28,23 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  // Always try network first for manifest and SW-related so install sees new icons
+  const url = new URL(req.url);
+  const isManifest = url.pathname.endsWith('manifest.json');
+
+  if (isManifest) {
+    event.respondWith(
+      fetch(req).then(res => {
+        if (res && res.status === 200) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
+        }
+        return res;
+      }).catch(() => caches.match(req))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(req).then(cached => {
